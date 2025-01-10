@@ -57,7 +57,7 @@ Pipfile
 Pipfile.lock
 poetry.lock
 pyvenv.cfg
-
+.ruff_cache/
 # Flask-specific files
 instance/
 *.sqlite3
