@@ -1,0 +1,133 @@
+# General OS-specific files
+###########################
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.trash/
+
+# General IDE files
+####################
+
+# VSCode
+.vscode/
+.vscode/*
+
+# JetBrains (PyCharm, WebStorm, etc.)
+.idea/
+*.iml
+
+# Editors
+*.sublime-workspace
+*.sublime-project
+
+# Logs and temporary files
+###########################
+
+*.log
+*.tmp
+*.swp
+*.swo
+*.bak
+*.orig
+*.~lock.*
+
+# Python-specific files
+########################
+
+# Byte-compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment and package management
+env/
+venv/
+.venv/
+Pipfile
+Pipfile.lock
+poetry.lock
+pyvenv.cfg
+
+# Flask-specific files
+instance/
+*.sqlite3
+*.db
+
+# PyTorch
+*.pt
+*.pth
+
+# ollama
+.cache/
+.ollama/
+
+# JavaScript/React files
+########################
+
+# Node.js dependencies
+node_modules/
+package-lock.json
+yarn.lock
+.pnp.cjs
+.pnp.js
+.pnp/
+
+# Build outputs
+build/
+dist/
+out/
+*.cache
+
+# Coverage reports
+coverage/
+coverage-final.json
+.nyc_output/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# PostgreSQL-related files
+###########################
+
+*.dump
+
+# Ignore dump and backup files
+*.tar
+*.gz
+*.bz2
+*.zip
+
+# Global Git-related files
+###########################
+
+*.orig
+*.rej
+*.gitattributes.lock
+
+# Specific to Mono-repo/Multi-language
+###########################
+
+# Ignore top-level build artifacts
+/build/
+output/
+artifacts/
+
+# Ignore temporary working files for collaboration
+*.session
+*.ipynb_checkpoints/
+
+# IDE/Editor backups
+.idea/
+*.code-workspace
