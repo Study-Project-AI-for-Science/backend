@@ -1,0 +1,13 @@
+name: "aiforscience"
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    container_name: db
+    restart: no # default
+    environment:
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./volumes/db:/var/lib/postgresql/data
