@@ -20,4 +20,8 @@ for pdf in sample_data/*.pdf; do
     python3 insert_paper_demo.py "$filename" "$pdf"
 done
 
+# Delete the folder with sample PDFs after processing
+echo "Deleting sample_data folder..."
+rm -rf sample_data
+
 echo "Setup with samples completed successfully!"
