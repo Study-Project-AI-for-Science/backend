@@ -24,10 +24,12 @@ done
 echo "PostgreSQL is ready!"
 
 # Run the Python setup script to create the bucket
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
 echo "Running Python script to set up the 'papers' bucket..."
-python ./database/create_bucket.py
+python "$SCRIPT_DIR/create_bucket.py"
 
 echo "Running migrations..."
-python ./database/run_migrations.py
+python "$SCRIPT_DIR/run_migrations.py"
 
 echo "Setup completed successfully!"
