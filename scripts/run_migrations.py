@@ -2,13 +2,9 @@ import os
 import psycopg
 from psycopg.rows import dict_row
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/postgres"
-)
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
 MIGRATIONS_DIR = os.path.abspath(
-    os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "../modules/database/migrations"
-    )
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "../modules/database/migrations")
 )
 
 
@@ -45,7 +41,6 @@ def apply_migration(conn, migration_path, name):
             cur.execute(sql)
             cur.execute("INSERT INTO migration_history (name) VALUES (%s)", (name,))
         conn.commit()
-
 
 
 def run_migrations():

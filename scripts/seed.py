@@ -15,9 +15,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 # Configuration
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/postgres"
-)
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
 MINIO_URL = "http://localhost:9000"
 ACCESS_KEY = "ROOT_USER"
 SECRET_KEY = "TOOR_PASSWORD"

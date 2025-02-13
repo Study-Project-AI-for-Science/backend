@@ -310,3 +310,6 @@ volumes/
 # Mac specific
 .DS_Store
 __MACOSX/
+
+# Own testing files
+._**
