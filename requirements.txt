@@ -3,3 +3,4 @@ uv
 flask
 psycopg
 uuid7
+psycopg_pool

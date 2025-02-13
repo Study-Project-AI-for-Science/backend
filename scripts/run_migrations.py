@@ -28,10 +28,24 @@ def get_applied_migrations(conn):
 def apply_migration(conn, migration_path, name):
     with open(migration_path, "r") as f:
         sql = f.read()
-    with conn.cursor() as cur:
-        cur.execute(sql)
-        cur.execute("INSERT INTO migration_history (name) VALUES (%s)", (name,))
-    conn.commit()
+
+    # Check if the migration file name ends with '.nontx.sql'
+    if name.endswith(".nontx.sql"):
+        # Run outside a transaction by enabling autocommit
+        old_autocommit = conn.autocommit
+        conn.autocommit = True
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql)
+                cur.execute("INSERT INTO migration_history (name) VALUES (%s)", (name,))
+        finally:
+            conn.autocommit = old_autocommit
+    else:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            cur.execute("INSERT INTO migration_history (name) VALUES (%s)", (name,))
+        conn.commit()
+
 
 
 def run_migrations():
