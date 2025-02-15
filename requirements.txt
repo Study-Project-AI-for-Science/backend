@@ -1,6 +1,14 @@
 boto3
 uv
-flask
-psycopg
+Flask
+psycopg[binary]
 uuid7
 psycopg_pool
+blinker
+click
+colorama
+itsdangerous
+Jinja2
+MarkupSafe
+python-dotenv
+Werkzeug

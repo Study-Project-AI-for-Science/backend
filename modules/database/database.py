@@ -18,6 +18,11 @@ import logging
 from uuid_extensions import uuid7str as uuid7
 import time
 import botocore.exceptions
+from dotenv import load_dotenv
+
+
+
+load_dotenv()
 
 # Configure logging for debugging and error tracking.
 logging.basicConfig(level=logging.INFO)
@@ -25,21 +30,21 @@ logger = logging.getLogger(__name__)
 
 
 # Database configuration: Adjust these as needed.
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
+POSTGRES_URL = os.getenv("POSTGRES_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
 
 # MinIO configuration
-MINIO_URL = "http://localhost:9000"
-ACCESS_KEY = "ROOT_USER"
-SECRET_KEY = "TOOR_PASSWORD"
-BUCKET_NAME = "papers"
+MINIO_URL = os.getenv("MINIO_URL", "http://localhost:9000")
+MINIO_ROOT_USER = os.getenv("MINIO_ROOT_USER", "ROOT_USER")
+MINIO_ROOT_PASSWORD = os.getenv("MINIO_ROOT_PASSWORD", "TOOR_PASSWORD")
+BUCKET_NAME = os.getenv("MINIO_BUCKET_NAME", "papers")
 
 # Initialize the MinIO client using boto3.
 # Note: MinIO supports the S3 API; we set the endpoint_url accordingly.
 s3_client = boto3.client(
     "s3",
     endpoint_url=MINIO_URL,
-    aws_access_key_id=ACCESS_KEY,
-    aws_secret_access_key=SECRET_KEY,
+    aws_access_key_id=MINIO_ROOT_USER,
+    aws_secret_access_key=MINIO_ROOT_PASSWORD,
 )
 
 
@@ -193,7 +198,7 @@ def paper_find(paper_id: str) -> dict:
 
     try:
         # Connect to the database using psycopg and set row factory for dict output.
-        with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
+        with psycopg.connect(POSTGRES_URL, row_factory=dict_row) as conn:
             with conn.cursor() as cur:
                 cur.execute(query, (paper_id,))
                 paper = cur.fetchone()
@@ -293,7 +298,7 @@ def paper_insert(file_path: str, title: str, authors: str, model_name: str, mode
             embedding = [0.0] * 1024
 
         # Insert records into the database in a transaction.
-        with psycopg.connect(DATABASE_URL) as conn:
+        with psycopg.connect(POSTGRES_URL) as conn:
             with conn.cursor() as cur:
                 # Insert into papers table.
                 paper_insert_query = """
@@ -383,7 +388,7 @@ def paper_update(paper_id: str, **kwargs):
 
     try:
         # Connect to the database and perform the update in a transaction.
-        with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
+        with psycopg.connect(POSTGRES_URL, row_factory=dict_row) as conn:
             with conn.cursor() as cur:
                 cur.execute(query, params)
                 updated_record = cur.fetchone()
@@ -419,7 +424,7 @@ def paper_delete(paper_id: str):
     """
     try:
         # First, retrieve the paper's file_url to use for the optional S3 deletion.
-        with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
+        with psycopg.connect(POSTGRES_URL, row_factory=dict_row) as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT file_url FROM papers WHERE paper_id = %s;", (paper_id,))
                 paper = cur.fetchone()
@@ -449,3 +454,4 @@ def paper_delete(paper_id: str):
     except Exception as e:
         logger.error(f"Failed to delete paper with ID {paper_id}: {e}")
         raise e
+
