@@ -30,9 +30,7 @@ def test_create_paper_no_data(client):
 def test_create_paper_invalid_content_type(client):
     """Test with an invalid content type."""
     response = client.post("/papers", data="invalid data", content_type="text/plain")
-    assert (
-        response.status_code == 201
-    )  # Still expect to work, content type should not matter, since the server side
+    assert response.status_code == 201  # Still expect to work, content type should not matter, since the server side
     # code does not depend on the content-type
     data = json.loads(response.data)  # Should not fail
     assert data == {}  # expect the response to be the default {}
