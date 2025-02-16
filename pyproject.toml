@@ -1,0 +1,44 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = "The backend for the LLMs for Science project."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "boto3",
+    "uv",
+    "Flask",
+    "psycopg[binary]",
+    "uuid7",
+    "psycopg_pool",
+    "blinker",
+    "click",
+    "colorama",
+    "itsdangerous",
+    "Jinja2",
+    "MarkupSafe",
+    "python-dotenv",
+    "Werkzeug",
+    "requests>=2.32.3",
+    "fitz>=0.0.1.dev2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+[tool.hatch.build.targets.wheel]
+    packages = ["./"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.4",
+    "ruff>=0.9.6",
+]
+
+
+[tool.pytest.ini_options]
+minversion = "8.3.4"
+addopts = "-ra -q"
+testpaths = [
+    "tests",
+]

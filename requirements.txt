@@ -1,5 +1,0 @@
-boto3
-uv
-flask
-psycopg
-uuid7
