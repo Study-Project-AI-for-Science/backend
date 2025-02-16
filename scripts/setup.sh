@@ -27,9 +27,9 @@ echo "PostgreSQL is ready!"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 echo "Running Python script to set up the 'papers' bucket..."
-python "$SCRIPT_DIR/create_bucket.py"
+uv run "$SCRIPT_DIR/create_bucket.py"
 
 echo "Running migrations..."
-python "$SCRIPT_DIR/run_migrations.py"
+uv run "$SCRIPT_DIR/run_migrations.py"
 
 echo "Setup completed successfully!"

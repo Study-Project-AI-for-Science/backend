@@ -16,7 +16,7 @@ SAMPLES_DIR="$( cd "$SCRIPT_DIR/../modules/database/seed" && pwd )"
 for pdf in "$SAMPLES_DIR"/*.pdf; do
     echo "Processing $pdf..."
     filename=$(basename "$pdf" .pdf)
-    python3 "$SCRIPT_DIR/seed.py" "$filename" "$pdf"
+    uv run "$SCRIPT_DIR/seed.py" "$filename" "$pdf"
 done
 
 
