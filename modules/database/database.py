@@ -20,7 +20,7 @@ import time
 import botocore.exceptions
 from dotenv import load_dotenv
 
-
+from modules.ollama import ollama as ollama
 
 load_dotenv()
 
@@ -54,16 +54,16 @@ def _paper_upload_to_s3(file_path: str) -> str:
 
     Description:
         Uploads the file located at `file_path` to the S3 storage and returns its URL.
-    
+
     Parameters:
         file_path (str): The local filesystem path of the PDF file to upload.
-    
+
     Returns:
         str: The URL of the uploaded file on S3.
-    
+
     Raises:
         Exception: If the upload fails after the maximum number of retries.
-    
+
     Example:
         url = _paper_upload_to_s3("/path/to/file.pdf")
     """
@@ -96,20 +96,20 @@ def _paper_download_from_s3(file_url: str, destination_path: str) -> None:
     Downloads a file from S3 and saves it to a local destination.
 
     Description:
-        Given a file URL from S3, this function extracts the S3 object key and downloads 
+        Given a file URL from S3, this function extracts the S3 object key and downloads
         the file to the provided destination path.
-    
+
     Parameters:
         file_url (str): The complete URL of the file stored on S3.
         destination_path (str): The local filesystem path where the file should be saved.
-    
+
     Returns:
         None
-    
+
     Raises:
         ValueError: If the `file_url` is not valid.
         Exception: If there is an error during the file download.
-    
+
     Example:
         _paper_download_from_s3("http://localhost:9000/papers/abc/filename.pdf", "/local/path/file.pdf")
     """
@@ -117,7 +117,7 @@ def _paper_download_from_s3(file_url: str, destination_path: str) -> None:
     if not file_url.startswith(prefix):
         logger.error(f"Invalid file URL: {file_url}")
         raise ValueError(f"Invalid file URL: {file_url}")
-    object_name = file_url[len(prefix):]
+    object_name = file_url[len(prefix) :]
 
     try:
         s3_client.download_file(BUCKET_NAME, object_name, destination_path)
@@ -133,16 +133,16 @@ def _paper_compute_file_hash(file_path: str) -> str:
 
     Description:
         Opens the file at `file_path` in binary mode and computes its SHA-256 hash using streamed read.
-    
+
     Parameters:
         file_path (str): The path to the file whose hash is to be computed.
-    
+
     Returns:
         str: A hexadecimal string representing the SHA-256 hash of the file.
-    
+
     Raises:
         Exception: If there is any error during file reading or hash computation.
-    
+
     Example:
         file_hash = _paper_compute_file_hash("/path/to/file.pdf")
     """
@@ -181,16 +181,16 @@ def paper_find(paper_id: str) -> dict:
 
     Description:
         Searches the "papers" table for a record with the given `paper_id` and returns its metadata.
-    
+
     Parameters:
         paper_id (str): The unique identifier of the paper.
-    
+
     Returns:
         dict: A dictionary containing the paper's metadata.
-    
+
     Raises:
         Exception: If the paper is not found or a database error occurs.
-    
+
     Example:
         paper = paper_find("1234abcd")
     """
@@ -219,19 +219,19 @@ def paper_get_file(paper_id: str, destination_path: str) -> None:
     Retrieves a paper file from S3 using its metadata.
 
     Description:
-        Uses `paper_find` to retrieve the paper metadata by `paper_id`, extracts the `file_url`, 
+        Uses `paper_find` to retrieve the paper metadata by `paper_id`, extracts the `file_url`,
         and downloads the file from S3 to the `destination_path`.
-    
+
     Parameters:
         paper_id (str): The unique identifier of the paper.
         destination_path (str): The local path where the file should be saved.
-    
+
     Returns:
         None
-    
+
     Raises:
         Exception: If the paper is not found or the file_url is missing.
-    
+
     Example:
         paper_get_file("1234abcd", "/local/path/file.pdf")
     """
@@ -265,22 +265,22 @@ def paper_insert(file_path: str, title: str, authors: str, model_name: str, mode
     Inserts a new paper and its embedding into the database.
 
     Description:
-        Computes the file hash, uploads the paper to S3, generates an embedding, and inserts 
+        Computes the file hash, uploads the paper to S3, generates an embedding, and inserts
         the paper's metadata into the "papers" table and the embedding into the "paper_embeddings" table.
-    
+
     Parameters:
         file_path (str): The local path to the PDF file.
         title (str): The title of the paper.
         authors (str): The authors of the paper.
         model_name (str): The name of the model used for generating the embedding.
         model_version (str): The version of the model used.
-    
+
     Returns:
         The paper_id (str) of the newly inserted paper.
-    
+
     Raises:
         Exception: If any step fails (hash computation, S3 upload, embedding generation, or database insertion).
-    
+
     Example:
         paper_id = paper_insert("/path/to/file.pdf", "Title", "Author A, Author B", "modelX", "v1")
     """
@@ -350,19 +350,19 @@ def paper_update(paper_id: str, **kwargs):
 
     Description:
         Validates and updates the specified fields for the paper with `paper_id` in the "papers" table.
-    
+
     Parameters:
         paper_id (str): The unique identifier of the paper to update.
-        kwargs: Keyword arguments corresponding to the fields to update. 
+        kwargs: Keyword arguments corresponding to the fields to update.
                 Allowed keys: 'title', 'authors', 'file_url', 'file_hash'.
-    
+
     Returns:
         dict: The updated paper record.
-    
+
     Raises:
         ValueError: If an invalid field is provided or no valid fields are provided.
         Exception: If the paper is not found or a database error occurs.
-    
+
     Example:
         updated_record = paper_update("1234abcd", title="New Title", authors="New Authors")
     """
@@ -409,16 +409,16 @@ def paper_delete(paper_id: str):
     Description:
         Removes the paper record from the "papers" table and the associated embedding from
         the "paper_embeddings" table. Optionally, deletes the corresponding file from S3.
-    
+
     Parameters:
         paper_id (str): The unique identifier of the paper to delete.
-    
+
     Returns:
         None
-    
+
     Raises:
         Exception: If the paper is not found or if a database or S3 deletion error occurs.
-    
+
     Example:
         paper_delete("1234abcd")
     """
@@ -443,7 +443,7 @@ def paper_delete(paper_id: str):
         if file_url:
             prefix = f"{MINIO_URL}/{BUCKET_NAME}/"
             if file_url.startswith(prefix):
-                object_name = file_url[len(prefix):]
+                object_name = file_url[len(prefix) :]
                 try:
                     s3_client.delete_object(Bucket=BUCKET_NAME, Key=object_name)
                     logger.info(f"Successfully deleted file from S3: {file_url}")
@@ -454,4 +454,3 @@ def paper_delete(paper_id: str):
     except Exception as e:
         logger.error(f"Failed to delete paper with ID {paper_id}: {e}")
         raise e
-

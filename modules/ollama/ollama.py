@@ -23,12 +23,13 @@ logger = logging.getLogger(__name__)
 #  environment variables is generally preferred for security and flexibility.
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")  # Default Ollama host
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistralai/Mistral-7B-Instruct-v0.1") # Default model
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistralai/Mistral-7B-Instruct-v0.1")  # Default model
 OLLAMA_API_TIMEOUT = int(os.getenv("OLLAMA_API_TIMEOUT", "60"))  # Timeout in seconds, default 60
 OLLAMA_MAX_RETRIES = int(os.getenv("OLLAMA_MAX_RETRIES", "3"))  # Max retries, default 3
 OLLAMA_RETRY_DELAY = int(os.getenv("OLLAMA_RETRY_DELAY", "2"))  # Retry delay in seconds, default 2
 
 # --- Helper Functions ---
+
 
 def _send_request_to_ollama(prompt: str, model: str = OLLAMA_MODEL, stream: bool = False) -> Optional[List[float]]:
     """
@@ -52,7 +53,7 @@ def _send_request_to_ollama(prompt: str, model: str = OLLAMA_MODEL, stream: bool
         "prompt": prompt,
         "model": model,
         "stream": stream,  # Include stream, even if we don't use it
-        "options": {},    # Add any model-specific options here.
+        "options": {},  # Add any model-specific options here.
     }
 
     for attempt in range(OLLAMA_MAX_RETRIES):
@@ -80,6 +81,7 @@ def _send_request_to_ollama(prompt: str, model: str = OLLAMA_MODEL, stream: bool
     logger.error(f"Ollama API request failed after {OLLAMA_MAX_RETRIES} attempts.")
     return None
 
+
 def _extract_text_from_pdf(pdf_path: str) -> str:
     """
     Extracts text content from a PDF file.  Uses a robust library like
@@ -97,6 +99,7 @@ def _extract_text_from_pdf(pdf_path: str) -> str:
     """
     try:
         import fitz  # PyMuPDF
+
         with fitz.open(pdf_path) as doc:
             text = ""
             for page in doc:
@@ -110,9 +113,8 @@ def _extract_text_from_pdf(pdf_path: str) -> str:
         raise
 
 
-
-
 # --- Main API Functions ---
+
 
 def get_paper_embeddings(pdf_path: str) -> Optional[List[float]]:
     """
@@ -134,15 +136,15 @@ def get_paper_embeddings(pdf_path: str) -> Optional[List[float]]:
             logger.warning(f"No text extracted from PDF: {pdf_path}")
             return None
 
-        embeddings = _send_request_to_ollama(text_content)
-        return embeddings
+        #TODO: needs to be implemented
+        raise NotImplementedError("get_paper_embeddings is not implemented yet.")
+        #return embeddings
 
     except FileNotFoundError:
-        raise # Re-raise to be handled by caller
+        raise  # Re-raise to be handled by caller
     except Exception as e:
         logger.error(f"Error in get_paper_embeddings: {e}")
-        raise # Re-raise general exception
-
+        raise  # Re-raise general exception
 
 
 def get_query_embeddings(query_string: str) -> Optional[List[float]]:
@@ -162,7 +164,6 @@ def get_query_embeddings(query_string: str) -> Optional[List[float]]:
     if not query_string.strip():
         logger.error("Query string cannot be empty.")
         raise ValueError("Query string cannot be empty.")
-
-
+    raise NotImplementedError("get_query_embeddings is not implemented yet.")
     embeddings = _send_request_to_ollama(query_string)
     return embeddings
