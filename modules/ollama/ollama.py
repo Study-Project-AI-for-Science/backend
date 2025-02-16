@@ -12,6 +12,7 @@ import json
 import time
 import logging
 from typing import List, Optional
+import faker
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -116,7 +117,9 @@ def _extract_text_from_pdf(pdf_path: str) -> str:
 # --- Main API Functions ---
 
 
-def get_paper_embeddings(pdf_path: str) -> Optional[List[float]]:
+#! Expecting get_paper_embeddings to return a dict with keys:
+#! "embeddings": list of embeddings, "model_name": str, "model_version": str.
+def get_paper_embeddings(pdf_path: str) -> Optional[List[float]]:  # TODO: needs to be implemented
     """
     Gets the embeddings for a given PDF paper.
 
@@ -131,14 +134,13 @@ def get_paper_embeddings(pdf_path: str) -> Optional[List[float]]:
       Exception:  For other errors related to PDF processing or Ollama communication.
     """
     try:
+        raise NotImplementedError("get_paper_embeddings is not implemented yet.")
         text_content = _extract_text_from_pdf(pdf_path)
         if not text_content:
             logger.warning(f"No text extracted from PDF: {pdf_path}")
             return None
 
-        #TODO: needs to be implemented
-        raise NotImplementedError("get_paper_embeddings is not implemented yet.")
-        #return embeddings
+        # return embeddings
 
     except FileNotFoundError:
         raise  # Re-raise to be handled by caller
@@ -147,6 +149,7 @@ def get_paper_embeddings(pdf_path: str) -> Optional[List[float]]:
         raise  # Re-raise general exception
 
 
+# TODO: Needs to be implemented
 def get_query_embeddings(query_string: str) -> Optional[List[float]]:
     """
     Gets the embeddings for a given query string.
@@ -161,9 +164,42 @@ def get_query_embeddings(query_string: str) -> Optional[List[float]]:
       ValueError: If query string is empty
       Exception:  For any other errors during communication with Ollama
     """
+    raise NotImplementedError("get_query_embeddings is not implemented yet.")
     if not query_string.strip():
         logger.error("Query string cannot be empty.")
         raise ValueError("Query string cannot be empty.")
-    raise NotImplementedError("get_query_embeddings is not implemented yet.")
+
     embeddings = _send_request_to_ollama(query_string)
     return embeddings
+
+
+def get_paper_info(file_path: str) -> dict:  #!TODO: Need to implement this function correctly,
+    # for now it returns fake data
+    """
+    Gets the metadata for a given PDF paper.
+
+    Args:
+        file_path: The path to the PDF file.
+
+    Returns:
+        A dictionary containing metadata information for the paper.
+
+    Raises:
+      FileNotFoundError:  If the file_path does not exist
+      Exception:  For any other errors during processing
+    """
+    try:
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File not found: {file_path}")
+
+        fake = faker.Faker()
+        # Generate a fake title.
+        title = fake.sentence(nb_words=6).rstrip(".")
+        # Randomly choose between 1 to 5 authors.
+        num_authors = fake.random_int(min=1, max=5)
+        authors = ", ".join(fake.name() for _ in range(num_authors))
+
+        return {"title": title, "authors": authors}
+    except Exception as e:
+        logger.error(f"Error generating fake paper info for {file_path}: {e}")
+        raise e

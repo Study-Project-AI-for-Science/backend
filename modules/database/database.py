@@ -158,23 +158,6 @@ def _paper_compute_file_hash(file_path: str) -> str:
     return hash_sha256.hexdigest()
 
 
-def _paper_generate_embedding(file_path: str) -> list:  # TODO to be implemented
-    """
-    Generates embeddings for the given paper
-
-    Steps:
-      - Call an external service to generate embeddings from the PDF file.
-      - Insert the embeddings into the "paper_embeddings" table along with the model name and version
-
-    Considerations:
-      - Handle potential errors from the embedding service (timeouts, API errors).
-      - Log performance metrics if embedding generation is time-consuming.
-      - Ensure that the model name and version
-      are tracked (as provided to insert_paper).
-    """
-    pass
-
-
 def paper_find(paper_id: str) -> dict:
     """
     Retrieves a paper's metadata from the database.
@@ -244,36 +227,52 @@ def paper_get_file(paper_id: str, destination_path: str) -> None:
     _paper_download_from_s3(file_url, destination_path)
 
 
-def paper_get_embedding(paper_id: str) -> dict:  # TODO to be implemented
+def paper_get_embeddings(paper_id: str) -> dict:
     """
-    Retrieves a paper's embedding and associated
+    Retrieves a paper's embeddings and associated
     metadata from the "paper_embeddings" table.
 
     Steps:
       - Query the "paper_embeddings" table using the paper_id.
-      - Return the embedding along with model_name, model_version, and created_at.
+      - Return the embeddings along with model_name, model_version, and created_at.
 
     Considerations:
       - Handle cases where no embedding is found for the provided paper_id.
       - Ensure consistency with the "papers" table via foreign key relationships.
     """
-    pass
-
-
-def paper_insert(file_path: str, title: str, authors: str, model_name: str, model_version: str):
+    query = """
+        SELECT embedding, model_name, model_version, created_at
+        FROM paper_embeddings
+        WHERE paper_id = %s;
     """
-    Inserts a new paper and its embedding into the database.
+    try:
+        with psycopg.connect(POSTGRES_URL, row_factory=dict_row) as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, (paper_id,))
+                result = cur.fetchone()
+        if result is None:
+            logger.error(f"No embeddings found for paper ID {paper_id}")
+            raise Exception(f"No embeddings found for paper ID {paper_id}")
+        return result
+    except Exception as e:
+        logger.error(f"Error retrieving embeddings for paper {paper_id}: {e}")
+        raise e
+
+
+def paper_insert(file_path: str, title: str, authors: str):
+    """
+    Inserts a new paper and its embedding(s) into the database.
 
     Description:
-        Computes the file hash, uploads the paper to S3, generates an embedding, and inserts
-        the paper's metadata into the "papers" table and the embedding into the "paper_embeddings" table.
+        Computes the file hash, uploads the paper to S3, generates one or more embeddings,
+        and inserts the paper's metadata into the "papers" table and each embedding into the
+        "paper_embeddings" table. The embedding generation function returns multiple embeddings,
+        all associated with the same paper id. It also returns the model_name and model_version used.
 
     Parameters:
         file_path (str): The local path to the PDF file.
         title (str): The title of the paper.
         authors (str): The authors of the paper.
-        model_name (str): The name of the model used for generating the embedding.
-        model_version (str): The version of the model used.
 
     Returns:
         The paper_id (str) of the newly inserted paper.
@@ -282,7 +281,7 @@ def paper_insert(file_path: str, title: str, authors: str, model_name: str, mode
         Exception: If any step fails (hash computation, S3 upload, embedding generation, or database insertion).
 
     Example:
-        paper_id = paper_insert("/path/to/file.pdf", "Title", "Author A, Author B", "modelX", "v1")
+        paper_id = paper_insert("/path/to/file.pdf", "Title", "Author A, Author B")
     """
     try:
         # Compute file hash.
@@ -291,11 +290,26 @@ def paper_insert(file_path: str, title: str, authors: str, model_name: str, mode
         # Upload file to S3.
         file_url = _paper_upload_to_s3(file_path)
 
-        # Generate embedding using the file directly.
-        embedding = _paper_generate_embedding(file_path)
-        if embedding is None:
-            # Fallback dummy embedding if _paper_generate_embedding is not implemented.
-            embedding = [0.0] * 1024
+        # If title or authors is empty, fill missing info using paper_get_info.
+        if not title or not authors:
+            # Assume paper_get_info returns a dict with keys: title and authors.
+            info = ollama.get_paper_info(file_path)
+            if not title:
+                title = info.get("title", title)
+            if not authors:
+                authors = info.get("authors", authors)
+
+        # Generate embeddings using the file directly.
+        # Expecting get_paper_embeddings to return a dict with keys:
+        # "embeddings": list of embeddings, "model_name": str, "model_version": str.
+        embedding_info = ollama.get_paper_embeddings(file_path)
+        embeddings = embedding_info.get("embeddings", [])
+        model_name = embedding_info.get("model_name", "")
+        model_version = embedding_info.get("model_version", "")
+
+        if not embeddings:
+            # Fallback to a dummy embedding if the generation fails.
+            embeddings = [[0.0] * 1024]
 
         # Insert records into the database in a transaction.
         with psycopg.connect(POSTGRES_URL) as conn:
@@ -309,12 +323,13 @@ def paper_insert(file_path: str, title: str, authors: str, model_name: str, mode
                 cur.execute(paper_insert_query, (title, authors, file_url, file_hash))
                 paper_id = cur.fetchone()[0]
 
-                # Insert into paper_embeddings table.
+                # Insert one record per embedding.
                 embed_insert_query = """
                     INSERT INTO paper_embeddings (paper_id, embedding, model_name, model_version)
                     VALUES (%s, %s, %s, %s);
                 """
-                cur.execute(embed_insert_query, (paper_id, embedding, model_name, model_version))
+                for emb in embeddings:
+                    cur.execute(embed_insert_query, (paper_id, emb, model_name, model_version))
             conn.commit()
 
         logger.info(f"Successfully inserted paper with ID {paper_id}")
@@ -325,23 +340,70 @@ def paper_insert(file_path: str, title: str, authors: str, model_name: str, mode
         raise e
 
 
-def paper_get_similar_to_query(query_embedding: list, limit: int = 10) -> list:  # TODO to be implemented
+def paper_get_similar_to_query(query_embedding: list, limit: int = 10, similarity_dropout: float = 0.0) -> list:
     """
     Searches for papers with embeddings similar to the given query_embedding.
 
     Steps:
       - Use the vector similarity search capabilities of PostgreSQL (via pgvector)
-      to find similar embeddings.
+        to find similar embeddings.
+      - Optionally filter out results with a similarity (distance) greater than similarity_dropout.
       - Join the results with the "papers" table to get full metadata.
       - Return a list of papers, each with its similarity score.
 
-    Considerations:
-      - Ensure that the vector similarity query uses the appropriate operator
-      (e.g., cosine similarity).
-      - Handle cases where no similar papers are found.
-      - Optimize the query for performance, possibly paginating the results if needed.
+    Parameters:
+        query_embedding (list): The embedding vector to compare.
+        limit (int): The maximum number of results to return.
+        similarity_dropout (float): A threshold for the similarity score. Only papers with
+                                    a similarity (i.e. distance) <= this value will be returned.
+                                    Set to 0.0 to disable filtering.
+
+    Returns:
+        list: A list of dictionaries containing paper metadata and similarity scores.
+
+    Raises:
+        Exception: If there is an error executing the database query.
     """
-    pass
+    try:
+        with psycopg.connect(POSTGRES_URL, row_factory=dict_row) as conn:
+            with conn.cursor() as cur:
+                if similarity_dropout > 0:
+                    query = """
+                        SELECT p.*, 
+                               pe.embedding, 
+                               pe.model_name, 
+                               pe.model_version, 
+                               pe.created_at, 
+                               (pe.embedding <=> %s) AS similarity
+                        FROM paper_embeddings pe
+                        JOIN papers p ON p.paper_id = pe.paper_id
+                        WHERE (pe.embedding <=> %s) <= %s
+                        ORDER BY (pe.embedding <=> %s)
+                        LIMIT %s;
+                    """
+                    # Pass the query_embedding four times and similarity_dropout value.
+                    cur.execute(query, (query_embedding, query_embedding, similarity_dropout, query_embedding, limit))
+                else:
+                    query = """
+                        SELECT p.*, 
+                               pe.embedding, 
+                               pe.model_name, 
+                               pe.model_version, 
+                               pe.created_at, 
+                               (pe.embedding <=> %s) AS similarity
+                        FROM paper_embeddings pe
+                        JOIN papers p ON p.paper_id = pe.paper_id
+                        ORDER BY (pe.embedding <=> %s)
+                        LIMIT %s;
+                    """
+                    cur.execute(query, (query_embedding, query_embedding, limit))
+                results = cur.fetchall()
+        if not results:
+            logger.info("No similar papers found for the provided query embedding.")
+        return results
+    except Exception as e:
+        logger.error(f"Error executing similarity search for query embedding: {e}")
+        raise e
 
 
 def paper_update(paper_id: str, **kwargs):
