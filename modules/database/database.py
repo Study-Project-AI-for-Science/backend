@@ -2,25 +2,18 @@
 database.py
 
 This module provides a unified interface for handling database operations for papers and
-their embeddings,
-as well as interactions with S3 storage. The functions below are placeholders with
-detailed documentation
-on what they should do, including considerations for error handling, consistency,
-and extensibility.
+their embeddings. It handles interactions with PostgreSQL for storing paper metadata and embeddings.
 """
 
 import os
 import hashlib
-import boto3
 import psycopg
 from psycopg.rows import dict_row
 import logging
-from uuid_extensions import uuid7str as uuid7
-import time
-import botocore.exceptions
 from dotenv import load_dotenv
 
-from modules.ollama import ollama as ollama
+from modules.ollama import ollama
+from modules.storage import storage
 
 load_dotenv()
 
@@ -28,40 +21,12 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
-# Database configuration: Adjust these as needed.
+# Database configuration
 POSTGRES_URL = os.getenv("POSTGRES_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
-
-# MinIO configuration
-MINIO_URL = os.getenv("MINIO_URL", "http://localhost:9000")
-MINIO_ROOT_USER = os.getenv("MINIO_ROOT_USER", "ROOT_USER")
-MINIO_ROOT_PASSWORD = os.getenv("MINIO_ROOT_PASSWORD", "TOOR_PASSWORD")
-BUCKET_NAME = os.getenv("MINIO_BUCKET_NAME", "papers")
-
-# Initialize the MinIO client using boto3.
-# Note: MinIO supports the S3 API; we set the endpoint_url accordingly.
-s3_client = boto3.client(
-    "s3",
-    endpoint_url=MINIO_URL,
-    aws_access_key_id=MINIO_ROOT_USER,
-    aws_secret_access_key=MINIO_ROOT_PASSWORD,
-)
 
 
 class PaperNotFoundError(Exception):
     """Exception raised when a paper is not found in the database."""
-
-    pass
-
-
-class S3UploadError(Exception):
-    """Exception raised when uploading a file to S3 fails."""
-
-    pass
-
-
-class S3DownloadError(Exception):
-    """Exception raised when downloading a file from S3 fails."""
 
     pass
 
@@ -96,80 +61,6 @@ class DuplicatePaperError(Exception):
     pass
 
 
-def _paper_upload_to_s3(file_path: str) -> str:
-    """
-    Uploads a PDF file to S3 with error handling and retry mechanism.
-
-    Description:
-        Uploads the file located at `file_path` to the S3 storage and returns its URL.
-
-    Parameters:
-        file_path (str): The local filesystem path of the PDF file to upload.
-
-    Returns:
-        str: The URL of the uploaded file on S3.
-
-    Raises:
-        Exception: If the upload fails after the maximum number of retries.
-
-    Example:
-        url = _paper_upload_to_s3("/path/to/file.pdf")
-    """
-    file_id = str(uuid7())
-    file_name = os.path.basename(file_path)
-    object_name = f"{file_id}/{file_name}"
-    max_retries = 3
-    delay = 2  # seconds
-
-    for attempt in range(1, max_retries + 1):
-        try:
-            s3_client.upload_file(file_path, BUCKET_NAME, object_name)
-            url = f"{MINIO_URL}/{BUCKET_NAME}/{object_name}"
-            logger.info(f"Successfully uploaded file to S3: {url}")
-            return url
-        except (botocore.exceptions.ClientError, botocore.exceptions.EndpointConnectionError) as e:
-            logger.error(f"S3 error on attempt {attempt} for file {file_path}: {e}")
-            if attempt >= max_retries:
-                raise S3UploadError(f"Failed to upload {file_path} to S3 after {max_retries} attempts: {str(e)}") from e
-        time.sleep(delay)
-
-
-def _paper_download_from_s3(file_url: str, destination_path: str) -> None:
-    """
-    Downloads a file from S3 and saves it to a local destination.
-
-    Description:
-        Given a file URL from S3, this function extracts the S3 object key and downloads
-        the file to the provided destination path.
-
-    Parameters:
-        file_url (str): The complete URL of the file stored on S3.
-        destination_path (str): The local filesystem path where the file should be saved.
-
-    Returns:
-        None
-
-    Raises:
-        ValueError: If the `file_url` is not valid.
-        Exception: If there is an error during the file download.
-
-    Example:
-        _paper_download_from_s3("http://localhost:9000/papers/abc/filename.pdf", "/local/path/file.pdf")
-    """
-    prefix = f"{MINIO_URL}/{BUCKET_NAME}/"
-    if not file_url.startswith(prefix):
-        logger.error(f"Invalid file URL: {file_url}")
-        raise ValueError(f"Invalid file URL: {file_url}")
-    object_name = file_url[len(prefix) :]
-
-    try:
-        s3_client.download_file(BUCKET_NAME, object_name, destination_path)
-        logger.info(f"Successfully downloaded file from S3 to {destination_path}")
-    except botocore.exceptions.ClientError as e:
-        logger.error(f"Error downloading file from S3: {e}")
-        raise S3DownloadError(f"Failed to download file from S3: {str(e)}") from e
-
-
 def _paper_compute_file_hash(file_path: str) -> str:
     """
     Computes the SHA-256 hash of a file's contents.
@@ -184,7 +75,7 @@ def _paper_compute_file_hash(file_path: str) -> str:
         str: A hexadecimal string representing the SHA-256 hash of the file.
 
     Raises:
-        Exception: If there is any error during file reading or hash computation.
+        FileHashError: If there is any error during file reading or hash computation.
 
     Example:
         file_hash = _paper_compute_file_hash("/path/to/file.pdf")
@@ -267,7 +158,7 @@ def paper_get_file(paper_id: str, destination_path: str) -> None:
         logger.error(f"File URL not found for paper ID {paper_id}")
         raise Exception(f"File URL not found for paper ID {paper_id}")
 
-    _paper_download_from_s3(file_url, destination_path)
+    storage.download_file(file_url, destination_path)
 
 
 def paper_get_embeddings(paper_id: str) -> dict:
@@ -308,8 +199,7 @@ def paper_insert(file_path: str, title: str, authors: str):
     Description:
         Computes the file hash, uploads the paper to S3, generates one or more embeddings,
         and inserts the paper's metadata into the "papers" table and each embedding into the
-        "paper_embeddings" table. The embedding generation function returns multiple embeddings,
-        all associated with the same paper id. It also returns the model_name and model_version used.
+        "paper_embeddings" table.
 
     Parameters:
         file_path (str): The local path to the PDF file.
@@ -326,7 +216,7 @@ def paper_insert(file_path: str, title: str, authors: str):
         paper_id = paper_insert("/path/to/file.pdf", "Title", "Author A, Author B")
     """
     try:
-        # Compute file hash.
+        # Compute file hash
         file_hash = _paper_compute_file_hash(file_path)
 
         # Check if a paper with this hash already exists
@@ -342,31 +232,28 @@ def paper_insert(file_path: str, title: str, authors: str):
                         f"title: '{existing_paper['title']}', authors: '{existing_paper['authors']}'"
                     )
 
-        # Upload file to S3.
-        file_url = _paper_upload_to_s3(file_path)
+        # Upload file to S3
+        file_url = storage.upload_file(file_path)
 
-        # If title or authors is empty, fill missing info using paper_get_info.
+        # If title or authors is empty, fill missing info using paper_get_info
         if not title or not authors:
-            # Assume paper_get_info returns a dict with keys: title and authors.
             info = ollama.get_paper_info(file_path)
             if not title:
                 title = info.get("title", title)
             if not authors:
                 authors = info.get("authors", authors)
 
-        # Generate embeddings using the file directly.
-        # Expecting get_paper_embeddings to return a dict with keys:
-        # "embeddings": list of embeddings, "model_name": str, "model_version": str.
+        # Generate embeddings using the file directly
         embedding_info = ollama.get_paper_embeddings(file_path)
         embeddings = embedding_info.get("embeddings", [])
         model_name = embedding_info.get("model_name", "")
         model_version = embedding_info.get("model_version", "")
 
         if not embeddings:
-            # Fallback to a dummy embedding if the generation fails.
+            # Fallback to a dummy embedding if the generation fails
             embeddings = [[0.0] * 1024]
 
-        with psycopg.connect(POSTGRES_URL) as conn:
+        with psycopg.connect(POSTGRES_URL, row_factory=dict_row) as conn:
             with conn.cursor() as cur:
                 paper_insert_query = """
                     INSERT INTO papers (title, authors, file_url, file_hash)
@@ -376,7 +263,7 @@ def paper_insert(file_path: str, title: str, authors: str):
                 cur.execute(paper_insert_query, (title, authors, file_url, file_hash))
                 paper_id = cur.fetchone()[0]
 
-                # Insert one record per embedding.
+                # Insert one record per embedding
                 embed_insert_query = """
                     INSERT INTO paper_embeddings (paper_id, embedding, model_name, model_version)
                     VALUES (%s, %s, %s, %s);
@@ -391,7 +278,7 @@ def paper_insert(file_path: str, title: str, authors: str):
     except psycopg.Error as e:
         logger.error(f"Failed to insert paper: {e}")
         raise DatabaseError(f"Database error while inserting paper: {str(e)}") from e
-    except (FileHashError, S3UploadError) as e:
+    except (FileHashError, storage.S3UploadError) as e:
         logger.error(f"Failed to insert paper: {e}")
         raise
     except Exception as e:
@@ -525,11 +412,11 @@ def paper_update(paper_id: str, **kwargs):
 
 def paper_delete(paper_id: str):
     """
-    Deletes a paper along with its embedding and optionally its S3 file.
+    Deletes a paper along with its embedding and S3 file.
 
     Description:
-        Removes the paper record from the "papers" table and the associated embedding from
-        the "paper_embeddings" table. Optionally, deletes the corresponding file from S3.
+        Removes the paper record from the "papers" table, the associated embedding from
+        the "paper_embeddings" table, and deletes the corresponding file from S3.
 
     Parameters:
         paper_id (str): The unique identifier of the paper to delete.
@@ -544,7 +431,7 @@ def paper_delete(paper_id: str):
         paper_delete("1234abcd")
     """
     try:
-        # First, retrieve the paper's file_url to use for the optional S3 deletion.
+        # First, retrieve the paper's file_url to use for S3 deletion
         with psycopg.connect(POSTGRES_URL, row_factory=dict_row) as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT file_url FROM papers WHERE id = %s;", (paper_id,))
@@ -553,27 +440,20 @@ def paper_delete(paper_id: str):
                     raise PaperNotFoundError(f"Paper with ID {paper_id} not found.")
                 file_url = paper.get("file_url")
 
-                # Delete the associated embeddings.
+                # Delete the associated embeddings
                 cur.execute("DELETE FROM paper_embeddings WHERE paper_id = %s;", (paper_id,))
-                # Delete the paper record.
+                # Delete the paper record
                 cur.execute("DELETE FROM papers WHERE id = %s;", (paper_id,))
             conn.commit()
         logger.info(f"Successfully deleted paper with ID {paper_id} from the database.")
 
-        # Optionally, delete the file from S3.
+        # Delete the file from S3
         if file_url:
-            prefix = f"{MINIO_URL}/{BUCKET_NAME}/"
-            if file_url.startswith(prefix):
-                object_name = file_url[len(prefix) :]
-                try:
-                    s3_client.delete_object(Bucket=BUCKET_NAME, Key=object_name)
-                    logger.info(f"Successfully deleted file from S3: {file_url}")
-                except botocore.exceptions.ClientError as s3_e:
-                    logger.error(f"Error deleting file from S3 for paper {paper_id}: {s3_e}")
-                    raise S3UploadError(f"Failed to delete file from S3: {str(s3_e)}") from s3_e
-            else:
-                logger.error(f"Invalid file URL, unable to delete from S3: {file_url}")
-                raise ValueError(f"Invalid file URL format: {file_url}")
+            try:
+                storage.delete_file(file_url)
+            except (ValueError, storage.S3UploadError) as e:
+                logger.error(f"Error deleting file from S3 for paper {paper_id}: {e}")
+                raise
     except psycopg.Error as e:
         logger.error(f"Failed to delete paper with ID {paper_id}: {e}")
         raise DatabaseError(f"Database error while deleting paper: {str(e)}") from e

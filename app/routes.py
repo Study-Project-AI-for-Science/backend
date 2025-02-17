@@ -4,13 +4,13 @@ import tempfile
 from modules.database import database as db
 from modules.database.database import (
     PaperNotFoundError,
-    S3UploadError,
     FileHashError,
     DatabaseError,
     EmbeddingNotFoundError,
     InvalidUpdateError,
     DuplicatePaperError,
 )
+from modules.storage.storage import S3UploadError
 from modules.ollama import ollama
 
 bp = Blueprint("main", __name__)
@@ -138,3 +138,8 @@ def delete_paper(paper_id):
         return jsonify({"error": str(e)}), 503
     except DatabaseError as e:
         return jsonify({"error": str(e)}), 500
+
+
+@bp.errorhandler(404)
+def not_found(error):
+    return jsonify({"error": "Resource not found"}), 404
