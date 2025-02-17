@@ -48,6 +48,54 @@ s3_client = boto3.client(
 )
 
 
+class PaperNotFoundError(Exception):
+    """Exception raised when a paper is not found in the database."""
+
+    pass
+
+
+class S3UploadError(Exception):
+    """Exception raised when uploading a file to S3 fails."""
+
+    pass
+
+
+class S3DownloadError(Exception):
+    """Exception raised when downloading a file from S3 fails."""
+
+    pass
+
+
+class FileHashError(Exception):
+    """Exception raised when computing a file's hash fails."""
+
+    pass
+
+
+class DatabaseError(Exception):
+    """Base exception for database-related errors."""
+
+    pass
+
+
+class EmbeddingNotFoundError(Exception):
+    """Exception raised when embeddings are not found for a paper."""
+
+    pass
+
+
+class InvalidUpdateError(Exception):
+    """Exception raised when attempting to update a paper with invalid fields."""
+
+    pass
+
+
+class DuplicatePaperError(Exception):
+    """Exception raised when attempting to insert a paper that already exists."""
+
+    pass
+
+
 def _paper_upload_to_s3(file_path: str) -> str:
     """
     Uploads a PDF file to S3 with error handling and retry mechanism.
@@ -79,16 +127,11 @@ def _paper_upload_to_s3(file_path: str) -> str:
             url = f"{MINIO_URL}/{BUCKET_NAME}/{object_name}"
             logger.info(f"Successfully uploaded file to S3: {url}")
             return url
-        except botocore.exceptions.ClientError as e:
-            logger.error(f"S3 ClientError on attempt {attempt} for file {file_path}: {e}")
-        except botocore.exceptions.EndpointConnectionError as e:
-            logger.error(f"S3 EndpointConnectionError on attempt {attempt} for file {file_path}: {e}")
-        except Exception as e:
-            logger.error(f"Unexpected error on attempt {attempt} for file {file_path}: {e}")
-        if attempt < max_retries:
-            logger.info(f"Retrying upload in {delay} seconds...")
-            time.sleep(delay)
-    raise Exception(f"Failed to upload {file_path} to S3 after {max_retries} attempts.")
+        except (botocore.exceptions.ClientError, botocore.exceptions.EndpointConnectionError) as e:
+            logger.error(f"S3 error on attempt {attempt} for file {file_path}: {e}")
+            if attempt >= max_retries:
+                raise S3UploadError(f"Failed to upload {file_path} to S3 after {max_retries} attempts: {str(e)}") from e
+        time.sleep(delay)
 
 
 def _paper_download_from_s3(file_url: str, destination_path: str) -> None:
@@ -122,9 +165,9 @@ def _paper_download_from_s3(file_url: str, destination_path: str) -> None:
     try:
         s3_client.download_file(BUCKET_NAME, object_name, destination_path)
         logger.info(f"Successfully downloaded file from S3 to {destination_path}")
-    except Exception as e:
+    except botocore.exceptions.ClientError as e:
         logger.error(f"Error downloading file from S3: {e}")
-        raise e
+        raise S3DownloadError(f"Failed to download file from S3: {str(e)}") from e
 
 
 def _paper_compute_file_hash(file_path: str) -> str:
@@ -151,9 +194,9 @@ def _paper_compute_file_hash(file_path: str) -> str:
         with open(file_path, "rb") as f:
             for chunk in iter(lambda: f.read(4096), b""):
                 hash_sha256.update(chunk)
-    except Exception as e:
+    except (IOError, OSError) as e:
         logger.error(f"Error computing file hash for {file_path}: {e}")
-        raise e
+        raise FileHashError(f"Failed to compute hash for {file_path}: {str(e)}") from e
 
     return hash_sha256.hexdigest()
 
@@ -188,7 +231,7 @@ def paper_find(paper_id: str) -> dict:
 
         if paper is None:
             logger.error(f"Paper with ID {paper_id} not found.")
-            raise Exception(f"Paper with ID {paper_id} not found.")
+            raise PaperNotFoundError(f"Paper with ID {paper_id} not found.")
 
         return paper
 
@@ -229,8 +272,7 @@ def paper_get_file(paper_id: str, destination_path: str) -> None:
 
 def paper_get_embeddings(paper_id: str) -> dict:
     """
-    Retrieves a paper's embeddings and associated
-    metadata from the "paper_embeddings" table.
+    Retrieves a paper's embeddings and associated metadata from the "paper_embeddings" table.
 
     Steps:
       - Query the "paper_embeddings" table using the paper_id.
@@ -252,11 +294,11 @@ def paper_get_embeddings(paper_id: str) -> dict:
                 result = cur.fetchone()
         if result is None:
             logger.error(f"No embeddings found for paper ID {paper_id}")
-            raise Exception(f"No embeddings found for paper ID {paper_id}")
+            raise EmbeddingNotFoundError(f"No embeddings found for paper ID {paper_id}")
         return result
-    except Exception as e:
+    except psycopg.Error as e:
         logger.error(f"Error retrieving embeddings for paper {paper_id}: {e}")
-        raise e
+        raise DatabaseError(f"Database error while retrieving embeddings: {str(e)}") from e
 
 
 def paper_insert(file_path: str, title: str, authors: str):
@@ -287,6 +329,19 @@ def paper_insert(file_path: str, title: str, authors: str):
         # Compute file hash.
         file_hash = _paper_compute_file_hash(file_path)
 
+        # Check if a paper with this hash already exists
+        with psycopg.connect(POSTGRES_URL, row_factory=dict_row) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT paper_id, title, authors FROM papers WHERE file_hash = %s", (file_hash,))
+                existing_paper = cur.fetchone()
+
+                if existing_paper:
+                    logger.info(f"Paper with hash {file_hash} already exists (ID: {existing_paper['paper_id']})")
+                    raise DuplicatePaperError(
+                        f"This paper appears to be already in the database with ID: {existing_paper['paper_id']}, "
+                        f"title: '{existing_paper['title']}', authors: '{existing_paper['authors']}'"
+                    )
+
         # Upload file to S3.
         file_url = _paper_upload_to_s3(file_path)
 
@@ -311,10 +366,8 @@ def paper_insert(file_path: str, title: str, authors: str):
             # Fallback to a dummy embedding if the generation fails.
             embeddings = [[0.0] * 1024]
 
-        # Insert records into the database in a transaction.
         with psycopg.connect(POSTGRES_URL) as conn:
             with conn.cursor() as cur:
-                # Insert into papers table.
                 paper_insert_query = """
                     INSERT INTO papers (title, authors, file_url, file_hash)
                     VALUES (%s, %s, %s, %s)
@@ -335,9 +388,15 @@ def paper_insert(file_path: str, title: str, authors: str):
         logger.info(f"Successfully inserted paper with ID {paper_id}")
         return paper_id
 
-    except Exception as e:
+    except psycopg.Error as e:
         logger.error(f"Failed to insert paper: {e}")
-        raise e
+        raise DatabaseError(f"Database error while inserting paper: {str(e)}") from e
+    except (FileHashError, S3UploadError) as e:
+        logger.error(f"Failed to insert paper: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error while inserting paper: {e}")
+        raise DatabaseError(f"Failed to insert paper: {str(e)}") from e
 
 
 def paper_get_similar_to_query(query_embedding: list, limit: int = 10, similarity_dropout: float = 0.0) -> list:
@@ -381,7 +440,6 @@ def paper_get_similar_to_query(query_embedding: list, limit: int = 10, similarit
                         ORDER BY (pe.embedding <=> %s)
                         LIMIT %s;
                     """
-                    # Pass the query_embedding four times and similarity_dropout value.
                     cur.execute(query, (query_embedding, query_embedding, similarity_dropout, query_embedding, limit))
                 else:
                     query = """
@@ -401,9 +459,9 @@ def paper_get_similar_to_query(query_embedding: list, limit: int = 10, similarit
         if not results:
             logger.info("No similar papers found for the provided query embedding.")
         return results
-    except Exception as e:
+    except psycopg.Error as e:
         logger.error(f"Error executing similarity search for query embedding: {e}")
-        raise e
+        raise DatabaseError(f"Database error while performing similarity search: {str(e)}") from e
 
 
 def paper_update(paper_id: str, **kwargs):
@@ -422,8 +480,9 @@ def paper_update(paper_id: str, **kwargs):
         dict: The updated paper record.
 
     Raises:
-        ValueError: If an invalid field is provided or no valid fields are provided.
-        Exception: If the paper is not found or a database error occurs.
+        InvalidUpdateError: If an invalid field is provided or no valid fields are provided.
+        PaperNotFoundError: If the paper is not found.
+        DatabaseError: If a database error occurs.
 
     Example:
         updated_record = paper_update("1234abcd", title="New Title", authors="New Authors")
@@ -436,12 +495,12 @@ def paper_update(paper_id: str, **kwargs):
     # Validate input fields.
     for field, value in kwargs.items():
         if field not in allowed_fields:
-            raise ValueError(f"Invalid field for update: {field}")
+            raise InvalidUpdateError(f"Invalid field for update: {field}")
         set_clauses.append(f"{field} = %s")
         params.append(value)
 
     if not set_clauses:
-        raise ValueError("No valid fields provided to update.")
+        raise InvalidUpdateError("No valid fields provided to update.")
 
     # Construct the SQL query.
     set_clause = ", ".join(set_clauses)
@@ -455,13 +514,13 @@ def paper_update(paper_id: str, **kwargs):
                 cur.execute(query, params)
                 updated_record = cur.fetchone()
                 if updated_record is None:
-                    raise Exception(f"Paper with ID {paper_id} not found.")
+                    raise PaperNotFoundError(f"Paper with ID {paper_id} not found.")
             conn.commit()
         logger.info(f"Successfully updated paper with ID {paper_id}")
         return updated_record
-    except Exception as e:
+    except psycopg.Error as e:
         logger.error(f"Failed to update paper with ID {paper_id}: {e}")
-        raise e
+        raise DatabaseError(f"Database error while updating paper: {str(e)}") from e
 
 
 def paper_delete(paper_id: str):
@@ -491,7 +550,7 @@ def paper_delete(paper_id: str):
                 cur.execute("SELECT file_url FROM papers WHERE paper_id = %s;", (paper_id,))
                 paper = cur.fetchone()
                 if paper is None:
-                    raise Exception(f"Paper with ID {paper_id} not found.")
+                    raise PaperNotFoundError(f"Paper with ID {paper_id} not found.")
                 file_url = paper.get("file_url")
 
                 # Delete the associated embeddings.
@@ -509,10 +568,61 @@ def paper_delete(paper_id: str):
                 try:
                     s3_client.delete_object(Bucket=BUCKET_NAME, Key=object_name)
                     logger.info(f"Successfully deleted file from S3: {file_url}")
-                except Exception as s3_e:
+                except botocore.exceptions.ClientError as s3_e:
                     logger.error(f"Error deleting file from S3 for paper {paper_id}: {s3_e}")
+                    raise S3UploadError(f"Failed to delete file from S3: {str(s3_e)}") from s3_e
             else:
                 logger.error(f"Invalid file URL, unable to delete from S3: {file_url}")
-    except Exception as e:
+                raise ValueError(f"Invalid file URL format: {file_url}")
+    except psycopg.Error as e:
         logger.error(f"Failed to delete paper with ID {paper_id}: {e}")
-        raise e
+        raise DatabaseError(f"Database error while deleting paper: {str(e)}") from e
+
+
+def paper_list_all(page: int = 1, page_size: int = 10) -> dict:
+    """
+    Retrieves a paginated list of all papers from the database.
+
+    Description:
+        Returns a list of papers with basic metadata, ordered by creation date,
+        with pagination support.
+
+    Parameters:
+        page (int): The page number to retrieve (1-based). Defaults to 1.
+        page_size (int): The number of papers per page. Defaults to 10.
+
+    Returns:
+        dict: A dictionary containing:
+            - papers: List of paper records
+            - total: Total number of papers
+            - page: Current page number
+            - total_pages: Total number of pages
+
+    Example:
+        result = paper_list_all(page=2, page_size=20)
+    """
+    try:
+        offset = (page - 1) * page_size
+
+        with psycopg.connect(POSTGRES_URL, row_factory=dict_row) as conn:
+            with conn.cursor() as cur:
+                # Get total count
+                cur.execute("SELECT COUNT(*) as total FROM papers;")
+                total = cur.fetchone()["total"]
+
+                # Get paginated results
+                query = """
+                    SELECT paper_id, title, authors, file_url, created_at
+                    FROM papers
+                    ORDER BY created_at DESC
+                    LIMIT %s OFFSET %s;
+                """
+                cur.execute(query, (page_size, offset))
+                papers = cur.fetchall()
+
+                total_pages = (total + page_size - 1) // page_size  # Ceiling division
+
+                return {"papers": papers, "total": total, "page": page, "total_pages": total_pages}
+    except psycopg.Error as e:
+        logger.error(f"Error retrieving paper list: {e}")
+        raise DatabaseError(f"Database error while retrieving paper list: {str(e)}") from e
