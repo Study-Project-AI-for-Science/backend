@@ -220,7 +220,7 @@ def paper_find(paper_id: str) -> dict:
     Example:
         paper = paper_find("1234abcd")
     """
-    query = "SELECT * FROM papers WHERE paper_id = %s;"
+    query = "SELECT * FROM papers WHERE id = %s;"
 
     try:
         # Connect to the database using psycopg and set row factory for dict output.
@@ -332,13 +332,13 @@ def paper_insert(file_path: str, title: str, authors: str):
         # Check if a paper with this hash already exists
         with psycopg.connect(POSTGRES_URL, row_factory=dict_row) as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT paper_id, title, authors FROM papers WHERE file_hash = %s", (file_hash,))
+                cur.execute("SELECT id, title, authors FROM papers WHERE file_hash = %s", (file_hash,))
                 existing_paper = cur.fetchone()
 
                 if existing_paper:
-                    logger.info(f"Paper with hash {file_hash} already exists (ID: {existing_paper['paper_id']})")
+                    logger.info(f"Paper with hash {file_hash} already exists (ID: {existing_paper['id']})")
                     raise DuplicatePaperError(
-                        f"This paper appears to be already in the database with ID: {existing_paper['paper_id']}, "
+                        f"This paper appears to be already in the database with ID: {existing_paper['id']}, "
                         f"title: '{existing_paper['title']}', authors: '{existing_paper['authors']}'"
                     )
 
@@ -371,7 +371,7 @@ def paper_insert(file_path: str, title: str, authors: str):
                 paper_insert_query = """
                     INSERT INTO papers (title, authors, file_url, file_hash)
                     VALUES (%s, %s, %s, %s)
-                    RETURNING paper_id;
+                    RETURNING id;
                 """
                 cur.execute(paper_insert_query, (title, authors, file_url, file_hash))
                 paper_id = cur.fetchone()[0]
@@ -435,7 +435,7 @@ def paper_get_similar_to_query(query_embedding: list, limit: int = 10, similarit
                                pe.created_at, 
                                (pe.embedding <=> %s) AS similarity
                         FROM paper_embeddings pe
-                        JOIN papers p ON p.paper_id = pe.paper_id
+                        JOIN papers p ON p.id = pe.paper_id
                         WHERE (pe.embedding <=> %s) <= %s
                         ORDER BY (pe.embedding <=> %s)
                         LIMIT %s;
@@ -450,7 +450,7 @@ def paper_get_similar_to_query(query_embedding: list, limit: int = 10, similarit
                                pe.created_at, 
                                (pe.embedding <=> %s) AS similarity
                         FROM paper_embeddings pe
-                        JOIN papers p ON p.paper_id = pe.paper_id
+                        JOIN papers p ON p.id = pe.paper_id
                         ORDER BY (pe.embedding <=> %s)
                         LIMIT %s;
                     """
@@ -504,7 +504,7 @@ def paper_update(paper_id: str, **kwargs):
 
     # Construct the SQL query.
     set_clause = ", ".join(set_clauses)
-    query = f"UPDATE papers SET {set_clause} WHERE paper_id = %s RETURNING *;"
+    query = f"UPDATE papers SET {set_clause} WHERE id = %s RETURNING *;"
     params.append(paper_id)
 
     try:
@@ -547,7 +547,7 @@ def paper_delete(paper_id: str):
         # First, retrieve the paper's file_url to use for the optional S3 deletion.
         with psycopg.connect(POSTGRES_URL, row_factory=dict_row) as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT file_url FROM papers WHERE paper_id = %s;", (paper_id,))
+                cur.execute("SELECT file_url FROM papers WHERE id = %s;", (paper_id,))
                 paper = cur.fetchone()
                 if paper is None:
                     raise PaperNotFoundError(f"Paper with ID {paper_id} not found.")
@@ -556,7 +556,7 @@ def paper_delete(paper_id: str):
                 # Delete the associated embeddings.
                 cur.execute("DELETE FROM paper_embeddings WHERE paper_id = %s;", (paper_id,))
                 # Delete the paper record.
-                cur.execute("DELETE FROM papers WHERE paper_id = %s;", (paper_id,))
+                cur.execute("DELETE FROM papers WHERE id = %s;", (paper_id,))
             conn.commit()
         logger.info(f"Successfully deleted paper with ID {paper_id} from the database.")
 
@@ -612,7 +612,7 @@ def paper_list_all(page: int = 1, page_size: int = 10) -> dict:
 
                 # Get paginated results
                 query = """
-                    SELECT paper_id, title, authors, file_url, created_at
+                    SELECT id, title, authors, file_url, created_at
                     FROM papers
                     ORDER BY created_at DESC
                     LIMIT %s OFFSET %s;

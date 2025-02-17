@@ -65,7 +65,7 @@ def list_papers():
     try:
         if query:
             # Generate embedding for the search query
-            query_embedding = ollama.get_query_embedding(query)
+            query_embedding = ollama.get_query_embeddings(query)
             # Search for similar papers
             papers = db.paper_get_similar_to_query(query_embedding)
             # Format the response to exclude large embedding vectors

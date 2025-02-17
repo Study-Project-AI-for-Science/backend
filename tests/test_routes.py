@@ -38,7 +38,7 @@ def test_list_papers_without_query(client, mock_db, sample_paper):
 
 
 def test_list_papers_with_query(client, mock_db, mock_ollama, sample_paper):
-    mock_ollama.get_query_embedding.return_value = [0.1, 0.2, 0.3]
+    mock_ollama.get_query_embeddings.return_value = [0.1, 0.2, 0.3]
     mock_db.paper_get_similar_to_query.return_value = [sample_paper]
 
     response = client.get("/papers?query=test")
