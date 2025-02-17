@@ -1,42 +1,140 @@
 from flask import Blueprint, request, jsonify
+import os
+import tempfile
+from modules.database import database as db
+from modules.database.database import (
+    PaperNotFoundError,
+    S3UploadError,
+    FileHashError,
+    DatabaseError,
+    EmbeddingNotFoundError,
+    InvalidUpdateError,
+    DuplicatePaperError,
+)
+from modules.ollama import ollama
 
-# Define the blueprint
 bp = Blueprint("main", __name__)
 
 
-# Route: Home Page
 @bp.route("/")
 def home():
-    return jsonify({"message": "Hello there!"})
+    return jsonify({"message": "API is running"})
 
 
-# Route: POST /papers (Create a new paper - placeholder)
 @bp.route("/papers", methods=["POST"])
 def create_paper():
-    # In a real application, you'd process the request data (e.g., from a JSON body)
-    # and save the paper to a database.  For now, we just return an empty object.
-    # TODO: request.form.get("file")
-    return jsonify({}), 201  # 201 Created
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"error": "No file selected"}), 400
+
+    if not file.filename.lower().endswith(".pdf"):
+        return jsonify({"error": "Only PDF files are allowed"}), 400
+
+    title = request.form.get("title", "")
+    authors = request.form.get("authors", "")
+
+    try:
+        # Save the uploaded file temporarily
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+            file.save(temp_file.name)
+            # Insert the paper into the database
+            paper_id = db.paper_insert(temp_file.name, title, authors)
+            # Clean up the temporary file
+            os.unlink(temp_file.name)
+
+        return jsonify({"paper_id": paper_id}), 201
+    except DuplicatePaperError as e:
+        return jsonify({"error": str(e)}), 409
+    except FileHashError as e:
+        return jsonify({"error": str(e)}), 400
+    except S3UploadError as e:
+        return jsonify({"error": str(e)}), 503
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500
 
 
-# Route: GET /papers (List papers, optionally with a query)
 @bp.route("/papers", methods=["GET"])
 def list_papers():
-    query = request.args.get("query")  # Get the 'query' parameter from the URL
+    query = request.args.get("query")
+    page = int(request.args.get("page", 1))
+    page_size = int(request.args.get("page_size", 10))
 
-    # In a real application, you'd fetch papers from a database,
-    # potentially filtering based on the 'query' parameter.
-    # For now, we return an empty list.
-    if query:
-        # Placeholder for filtered results.  In a real app, you'd query a database.
-        return jsonify([])
-    else:
-        return jsonify([])
+    try:
+        if query:
+            # Generate embedding for the search query
+            query_embedding = ollama.get_query_embeddings(query)
+            # Search for similar papers
+            papers = db.paper_get_similar_to_query(query_embedding)
+            # Format the response to exclude large embedding vectors
+            formatted_papers = [
+                {
+                    "paper_id": paper["paper_id"],
+                    "title": paper["title"],
+                    "authors": paper["authors"],
+                    "similarity": paper["similarity"],
+                }
+                for paper in papers
+            ]
+            return jsonify({"papers": formatted_papers, "total": len(formatted_papers), "page": 1, "total_pages": 1})
+        else:
+            # Get paginated list of all papers
+            result = db.paper_list_all(page=page, page_size=page_size)
+            return jsonify(result)
+
+    except EmbeddingNotFoundError as e:
+        return jsonify({"error": str(e)}), 404
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500
 
 
-# Route: GET /papers/<id> (Get a specific paper by ID)
-@bp.route("/papers/<string:id>", methods=["GET"])  # Ensure 'id' is treated as an integer
-def get_paper(id):
-    # In a real application, you'd fetch the paper with the given ID from a database.
-    # For now, we return an empty object.
-    return jsonify({})
+@bp.route("/papers/<string:paper_id>", methods=["GET"])
+def get_paper(paper_id):
+    try:
+        paper = db.paper_find(paper_id)
+        # Remove the embedding from the response to reduce payload size
+        if "embedding" in paper:
+            del paper["embedding"]
+        return jsonify(paper)
+    except PaperNotFoundError as e:
+        return jsonify({"error": str(e)}), 404
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bp.route("/papers/<string:paper_id>", methods=["PUT"])
+def update_paper(paper_id):
+    try:
+        update_data = {}
+        if "title" in request.json:
+            update_data["title"] = request.json["title"]
+        if "authors" in request.json:
+            update_data["authors"] = request.json["authors"]
+
+        if not update_data:
+            return jsonify({"error": "No valid fields to update"}), 400
+
+        updated_paper = db.paper_update(paper_id, **update_data)
+        return jsonify(updated_paper)
+    except PaperNotFoundError as e:
+        return jsonify({"error": str(e)}), 404
+    except InvalidUpdateError as e:
+        return jsonify({"error": str(e)}), 400
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bp.route("/papers/<string:paper_id>", methods=["DELETE"])
+def delete_paper(paper_id):
+    try:
+        db.paper_delete(paper_id)
+        return "", 204
+    except PaperNotFoundError as e:
+        return jsonify({"error": str(e)}), 404
+    except S3UploadError as e:
+        # Even though it's a delete operation, we use S3UploadError for S3 operations
+        return jsonify({"error": str(e)}), 503
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500

@@ -60,6 +60,12 @@ To run ruff with uv, you can use <br>
  
  and <br>
 
- `uv run ruff format`
+ `uv run ruff format` <br>
+
+ To run the tests in the tests folder simply run <br>
+
+ `uv run pytest` <br>
+
+ 
 
 For further information and advanced configuration options, you can refer to the uv documentation, or ask @Antim8
