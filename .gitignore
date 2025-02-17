@@ -32,7 +32,7 @@ $RECYCLE.BIN/
 
 # Logs and temporary files
 ###########################
-
+logs/
 *.log
 *.tmp
 *.swp
