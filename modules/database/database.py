@@ -275,12 +275,12 @@ def paper_insert(file_path: str, title: str, authors: str):
         logger.info(f"Successfully inserted paper with ID {paper_id}")
         return paper_id
 
+    except (DuplicatePaperError, FileHashError, storage.S3UploadError) as e:
+        logger.error(f"Failed to insert paper: {e}")
+        raise
     except psycopg.Error as e:
         logger.error(f"Failed to insert paper: {e}")
         raise DatabaseError(f"Database error while inserting paper: {str(e)}") from e
-    except (FileHashError, storage.S3UploadError) as e:
-        logger.error(f"Failed to insert paper: {e}")
-        raise
     except Exception as e:
         logger.error(f"Unexpected error while inserting paper: {e}")
         raise DatabaseError(f"Failed to insert paper: {str(e)}") from e
@@ -405,6 +405,9 @@ def paper_update(paper_id: str, **kwargs):
             conn.commit()
         logger.info(f"Successfully updated paper with ID {paper_id}")
         return updated_record
+    except PaperNotFoundError as e:
+        logger.error(f"Failed to update paper with ID {paper_id}: {e}")
+        raise
     except psycopg.Error as e:
         logger.error(f"Failed to update paper with ID {paper_id}: {e}")
         raise DatabaseError(f"Database error while updating paper: {str(e)}") from e
@@ -454,6 +457,9 @@ def paper_delete(paper_id: str):
             except (ValueError, storage.S3UploadError) as e:
                 logger.error(f"Error deleting file from S3 for paper {paper_id}: {e}")
                 raise
+    except PaperNotFoundError as e:
+        logger.error(f"Failed to delete paper with ID {paper_id}: {e}")
+        raise
     except psycopg.Error as e:
         logger.error(f"Failed to delete paper with ID {paper_id}: {e}")
         raise DatabaseError(f"Database error while deleting paper: {str(e)}") from e
