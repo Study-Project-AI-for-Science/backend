@@ -59,8 +59,13 @@ def create_paper():
 @bp.route("/papers", methods=["GET"])
 def list_papers():
     query = request.args.get("query")
-    page = int(request.args.get("page", 1))
-    page_size = int(request.args.get("page_size", 10))
+    # Validate and normalize page and page_size
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+        page_size = max(1, int(request.args.get("page_size", 10)))
+    except ValueError:
+        page = 1
+        page_size = 10
 
     try:
         if query:
