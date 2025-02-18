@@ -15,7 +15,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 # Configuration
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
+POSTGRES_URL = os.getenv("POSTGRES_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
 MINIO_URL = "http://localhost:9000"
 ACCESS_KEY = "ROOT_USER"
 SECRET_KEY = "TOOR_PASSWORD"
@@ -60,7 +60,7 @@ def insert_paper(title, file_path):
     file_url = upload_to_minio(file_path)
 
     # Insert into database
-    with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
+    with psycopg.connect(POSTGRES_URL, row_factory=dict_row) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """

@@ -2,7 +2,7 @@ import os
 import psycopg
 from psycopg.rows import dict_row
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
+POSTGRES_URL = os.getenv("POSTGRES_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
 MIGRATIONS_DIR = os.path.abspath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "../modules/database/migrations")
 )
@@ -44,7 +44,7 @@ def apply_migration(conn, migration_path, name):
 
 
 def run_migrations():
-    with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
+    with psycopg.connect(POSTGRES_URL, row_factory=dict_row) as conn:
         applied = get_applied_migrations(conn)
         migrations = sorted(f for f in os.listdir(MIGRATIONS_DIR) if f.endswith(".sql"))
         for migration in migrations:
