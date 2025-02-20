@@ -64,10 +64,10 @@ def _send_request_to_ollama(prompt: str, model: str = OLLAMA_MODEL, stream: bool
 
             # Assuming the Ollama embeddings API returns JSON like: {"embedding": [...]}
             response_json = response.json()
-            if "embedding" not in response_json:
+            if "embeddings" not in response_json:
                 raise ValueError(f"Invalid response from Ollama: {response_json}")
 
-            return response_json["embedding"]
+            return response_json["embeddings"]
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Ollama API request failed (attempt {attempt + 1}/{OLLAMA_MAX_RETRIES}): {e}")

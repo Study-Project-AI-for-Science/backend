@@ -18,7 +18,7 @@ def mock_ollama_response():
     """Simulates a valid Ollama API response returning a list of embeddings"""
     with patch("modules.ollama.ollama.requests.post") as mock_post:
         mock_response = Mock()
-        mock_response.json.return_value = {"embeddings": [0.1,0.2,0.3]} # immitates the response from Ollama
+        mock_response.json.return_value = {"embeddings": [0.1,0.2,0.3], "model_name": "name", "model_version": "version"} # immitates the response from Ollama
         mock_response.status_code = 200
         mock_post.return_value = mock_response
         yield mock_response
