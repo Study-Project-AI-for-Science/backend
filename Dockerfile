@@ -33,4 +33,4 @@ RUN pip install --no-cache-dir .
 EXPOSE 5000
 
 # Command to run the application
-CMD ["sh", "-c", "python scripts/run_migrations.py && python run.py"]
+CMD ["sh", "-c", "python scripts/run_migrations.py && python scripts/create_bucket.py && python run.py"]
