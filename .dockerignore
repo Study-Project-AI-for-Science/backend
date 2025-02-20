@@ -46,7 +46,6 @@ htmlcov/
 # Local development
 volumes/
 docker-compose.yml
-scripts/
 tests/
 
 # Documentation
