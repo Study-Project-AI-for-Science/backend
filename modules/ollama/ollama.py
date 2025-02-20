@@ -127,20 +127,30 @@ def get_paper_embeddings(pdf_path: str) -> Optional[List[float]]:  # TODO: needs
         pdf_path: The path to the PDF file.
 
     Returns:
-        A list of floats representing the embedding, or None if an error occurred.
+        A dictionary containing embeddings, model name, and model version, or None if an error occurred.
 
     Raises:
       FileNotFoundError:  If the pdf_path does not exist
       Exception:  For other errors related to PDF processing or Ollama communication.
     """
     try:
-        raise NotImplementedError("get_paper_embeddings is not implemented yet.")
         text_content = _extract_text_from_pdf(pdf_path)
         if not text_content:
             logger.warning(f"No text extracted from PDF: {pdf_path}")
             return None
 
-        # return embeddings
+        # Send the extracted text to Ollama for embeddings
+        embeddings, model_name, model_version = _send_request_to_ollama(text_content)
+        
+        if embeddings:
+            return {
+                "embeddings": embeddings, #List[float]
+                "model_name": model_name, #str
+                "model_version": model_version #str
+            }
+        else:
+            logger.error(f"Error generating embeddings for PDF: {pdf_path}")
+            return None
 
     except FileNotFoundError:
         raise  # Re-raise to be handled by caller
@@ -164,13 +174,22 @@ def get_query_embeddings(query_string: str) -> Optional[List[float]]:
       ValueError: If query string is empty
       Exception:  For any other errors during communication with Ollama
     """
-    raise NotImplementedError("get_query_embeddings is not implemented yet.")
+
     if not query_string.strip():
         logger.error("Query string cannot be empty.")
         raise ValueError("Query string cannot be empty.")
 
-    embeddings = _send_request_to_ollama(query_string)
-    return embeddings
+    try: 
+        # saves the embeddings in a dictionary ("embeddings": List[float], "model_name": str, "model_version": str)
+        embeddings = _send_request_to_ollama(query_string)
+        if embeddings is None:
+            logger.error(f"Error generating embeddings from Ollama for query: {query_string}")
+
+        return embeddings["embeddings"] # extracts the embeddings as a list of floats from the dictionary
+
+    except Exception as e:
+        logger.error(f"Error in get_query_embeddings: {e}")
+        return None
 
 
 def get_paper_info(file_path: str) -> dict:  #!TODO: Need to implement this function correctly,
