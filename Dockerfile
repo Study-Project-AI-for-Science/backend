@@ -8,7 +8,8 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     FLASK_APP=run.py \
-    FLASK_ENV=production
+    FLASK_ENV=production \
+    GUNICORN_WORKERS=4
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -21,6 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY pyproject.toml .
 COPY app/ app/
 COPY modules/ modules/
+COPY scripts/ scripts/
 COPY run.py .
 COPY README.md .
 COPY .env .
@@ -32,4 +34,4 @@ RUN pip install --no-cache-dir .
 EXPOSE 5000
 
 # Command to run the application
-CMD ["python", "run.py"]
+CMD ["sh", "-c", "python scripts/run_migrations.py && python scripts/create_bucket.py && gunicorn -w ${GUNICORN_WORKERS} -b 0.0.0.0:5000 'app:create_app()'"]

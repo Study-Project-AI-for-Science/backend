@@ -8,12 +8,14 @@ To spin up the database for local testing/development follow the following steps
 2. install [uv](https://docs.astral.sh/uv/) (explanation down below)
     - fastest way for mac and linux is: `curl -LsSf https://astral.sh/uv/install.sh | sh`
     - for Windows: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
-3. run `chmod +x ./scripts/setup.sh && ./scripts/setup.sh` 
+3. For Mac/Linux: run `chmod +x ./scripts/setup.sh && ./scripts/setup.sh`
+4. For Windows: run `bash ./scripts/setup.sh` (This works in PowerShell with Docker WSL integration enabled)
    
 <br>
 If you want to also insert a few sample files to the database as well as the s3 storage, you can insted replace step three with the following: <br>
 
-1. run `chmod +x ./setup_with_samples.sh && ./setup_with_samples.sh`
+1. For Max/Linux: run `chmod +x ./setup_with_samples.sh && ./setup_with_samples.sh`
+2. For Windows: run `bash ./setup_with_samples.sh` (This works in PowerShell with Docker WSL integration enabled)
 
 If everthing worked as intended, the postgressql database and the s3 storage are now running and ready to be worked with
 
