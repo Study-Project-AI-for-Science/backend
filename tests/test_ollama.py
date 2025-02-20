@@ -1,5 +1,8 @@
-"""
-Placeholder for tests for the ollama module.
+import pytest
 
-Future implementations will include comprehensive tests to validate the functionality of the ollama module.
-"""
+from modules.ollama.database import (
+    _send_request_to_ollama,
+    _extract_text_from_pdf,
+    get_paper_embeddings,
+
+)
