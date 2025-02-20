@@ -41,7 +41,12 @@ dev = [
 
 [tool.pytest.ini_options]
 minversion = "8.3.4"
-addopts = "-ra -q"
+addopts = "-ra -v"
 testpaths = [
     "tests",
+]
+filterwarnings = [
+    "ignore:builtin type SwigPyPacked has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type SwigPyObject has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning"
 ]
