@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY pyproject.toml .
 COPY app/ app/
 COPY modules/ modules/
+COPY scripts/ scripts/
 COPY run.py .
 COPY README.md .
 COPY .env .
@@ -32,4 +33,4 @@ RUN pip install --no-cache-dir .
 EXPOSE 5000
 
 # Command to run the application
-CMD ["python", "run.py"]
+CMD ["sh", "-c", "python scripts/run_migrations.py && python run.py"]
