@@ -78,7 +78,7 @@ def list_papers():
             # Format the response to exclude large embedding vectors
             formatted_papers = [
                 {
-                    "paper_id": paper["paper_id"],
+                    "paper_id": paper["id"],
                     "title": paper["title"],
                     "authors": paper["authors"],
                     "similarity": paper["similarity"],

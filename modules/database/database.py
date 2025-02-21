@@ -322,11 +322,11 @@ def paper_get_similar_to_query(query_embedding: list, limit: int = 10, similarit
                                pe.model_name, 
                                pe.model_version, 
                                pe.created_at, 
-                               (pe.embedding <=> %s) AS similarity
+                               (pe.embedding <=> %s::vector) AS similarity
                         FROM paper_embeddings pe
                         JOIN papers p ON p.id = pe.paper_id
-                        WHERE (pe.embedding <=> %s) <= %s
-                        ORDER BY (pe.embedding <=> %s)
+                        WHERE (pe.embedding <=> %s::vector) <= %s
+                        ORDER BY (pe.embedding <=> %s::vector)
                         LIMIT %s;
                     """
                     cur.execute(query, (query_embedding, query_embedding, similarity_dropout, query_embedding, limit))
@@ -337,10 +337,10 @@ def paper_get_similar_to_query(query_embedding: list, limit: int = 10, similarit
                                pe.model_name, 
                                pe.model_version, 
                                pe.created_at, 
-                               (pe.embedding <=> %s) AS similarity
+                               (pe.embedding <=> %s::vector) AS similarity
                         FROM paper_embeddings pe
                         JOIN papers p ON p.id = pe.paper_id
-                        ORDER BY (pe.embedding <=> %s)
+                        ORDER BY (pe.embedding <=> %s::vector)
                         LIMIT %s;
                     """
                     cur.execute(query, (query_embedding, query_embedding, limit))
