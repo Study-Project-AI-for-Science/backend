@@ -46,7 +46,12 @@ def mock_storage():
 
 @pytest.fixture
 def mock_ollama():
-    with patch("modules.database.database.ollama") as mock:
+    with patch("modules.database.database.ollama_client") as mock:
+        mock.get_paper_embeddings.return_value = {
+            "embeddings": [[0.1, 0.2]],
+            "model_name": "test-model",
+            "model_version": "1.0",
+        }
         yield mock
 
 

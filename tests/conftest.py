@@ -12,7 +12,8 @@ def mock_db():
 
 @pytest.fixture
 def mock_ollama():
-    with patch("app.routes.ollama") as mock_ollama:
+    with patch("app.routes.ollama_client") as mock_ollama:
+        mock_ollama.get_query_embeddings.return_value = [0.1, 0.2, 0.3]
         yield mock_ollama
 
 
