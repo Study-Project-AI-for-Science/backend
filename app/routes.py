@@ -17,6 +17,7 @@ from modules.ollama import ollama_client
 bp = Blueprint("main", __name__)
 CORS(bp)  # Enable CORS for all routes in this blueprint
 
+
 @bp.route("/")
 def home():
     return jsonify({"message": "API is running"})

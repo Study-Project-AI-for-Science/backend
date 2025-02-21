@@ -11,6 +11,7 @@ import psycopg
 from psycopg.rows import dict_row
 import logging
 from dotenv import load_dotenv
+from uuid_extensions import uuid7str as uuid7
 
 from modules.ollama import ollama_client
 from modules.storage import storage
@@ -255,13 +256,14 @@ def paper_insert(file_path: str, title: str, authors: str):
 
         with psycopg.connect(POSTGRES_URL, row_factory=dict_row) as conn:
             with conn.cursor() as cur:
+                # Generate a new UUID7 for the paper
+                paper_id = uuid7()
+
                 paper_insert_query = """
-                    INSERT INTO papers (title, authors, file_url, file_hash)
-                    VALUES (%s, %s, %s, %s)
-                    RETURNING id;
+                    INSERT INTO papers (id, title, authors, file_url, file_hash)
+                    VALUES (%s, %s, %s, %s, %s);
                 """
-                cur.execute(paper_insert_query, (title, authors, file_url, file_hash))
-                paper_id = cur.fetchone()[0]
+                cur.execute(paper_insert_query, (paper_id, title, authors, file_url, file_hash))
 
                 # Insert one record per embedding
                 embed_insert_query = """

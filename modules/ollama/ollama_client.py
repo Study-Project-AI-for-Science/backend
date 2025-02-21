@@ -154,7 +154,7 @@ def _split_text_into_segments(text: str, max_tokens: int = 512) -> List[str]:
             # Split long paragraph into smaller chunks
             words = para.split()
             current_chunk = []
-            #TODO: maybe sentence tokenizer
+            # TODO: maybe sentence tokenizer
             for word in words:
                 word_tokens = TOKENIZER.encode(word + " ", add_special_tokens=False)
                 if len(current_tokens) + len(word_tokens) <= max_tokens:
