@@ -23,6 +23,7 @@ dependencies = [
     "fitz>=0.0.1.dev2",
     "faker>=36.1.1",
     "gunicorn>=21.2.0",
+    "flask-cors>=5.0.0",
 ]
 
 [build-system]

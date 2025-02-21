@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from flask_cors import CORS
 import os
 import tempfile
 from modules.database import database as db
@@ -14,7 +15,7 @@ from modules.storage.storage import S3UploadError
 from modules.ollama import ollama
 
 bp = Blueprint("main", __name__)
-
+CORS(bp)  # Enable CORS for all routes in this blueprint
 
 @bp.route("/")
 def home():
