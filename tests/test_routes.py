@@ -150,9 +150,9 @@ def test_list_papers_empty_query(client, mock_db):
 def test_get_paper_success(client, mock_db, sample_paper):
     mock_db.paper_find.return_value = sample_paper
 
-    response = client.get(f"/papers/{sample_paper['paper_id']}")
+    response = client.get(f"/papers/{sample_paper['id']}")
     assert response.status_code == 200
-    assert response.json["paper_id"] == sample_paper["paper_id"]
+    assert response.json["id"] == sample_paper["id"]
 
 
 def test_get_paper_not_found(client, mock_db):
@@ -175,7 +175,7 @@ def test_update_paper_success(client, mock_db, sample_paper):
     update_data = {"title": "Updated Title", "authors": "Updated Author"}
     mock_db.paper_update.return_value = {**sample_paper, **update_data}
 
-    response = client.put(f"/papers/{sample_paper['paper_id']}", json=update_data)
+    response = client.put(f"/papers/{sample_paper['id']}", json=update_data)
     assert response.status_code == 200
     assert response.json["title"] == update_data["title"]
     assert response.json["authors"] == update_data["authors"]
@@ -209,16 +209,16 @@ def test_update_paper_partial_update(client, mock_db, sample_paper):
     expected_response = {**sample_paper, "title": "New Title Only"}
     mock_db.paper_update.return_value = expected_response
 
-    response = client.put(f"/papers/{sample_paper['paper_id']}", json=update_data)
+    response = client.put(f"/papers/{sample_paper['id']}", json=update_data)
     assert response.status_code == 200
     assert response.json["title"] == "New Title Only"
     assert response.json["authors"] == sample_paper["authors"]
 
 
 def test_delete_paper_success(client, mock_db, sample_paper):
-    response = client.delete(f"/papers/{sample_paper['paper_id']}")
+    response = client.delete(f"/papers/{sample_paper['id']}")
     assert response.status_code == 204
-    mock_db.paper_delete.assert_called_once_with(sample_paper["paper_id"])
+    mock_db.paper_delete.assert_called_once_with(sample_paper["id"])
 
 
 def test_delete_paper_not_found(client, mock_db):
