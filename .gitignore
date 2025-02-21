@@ -313,6 +313,3 @@ __MACOSX/
 
 # Own testing files
 ._**
-
-# ollama-group branch
-docker-compose.yml

@@ -12,7 +12,7 @@ from psycopg.rows import dict_row
 import logging
 from dotenv import load_dotenv
 
-from modules.ollama import ollama
+from modules.ollama import ollama_client
 from modules.storage import storage
 
 load_dotenv()
@@ -237,14 +237,14 @@ def paper_insert(file_path: str, title: str, authors: str):
 
         # If title or authors is empty, fill missing info using paper_get_info
         if not title or not authors:
-            info = ollama.get_paper_info(file_path)
+            info = ollama_client.get_paper_info(file_path)
             if not title:
                 title = info.get("title", title)
             if not authors:
                 authors = info.get("authors", authors)
 
         # Generate embeddings using the file directly
-        embedding_info = ollama.get_paper_embeddings(file_path)
+        embedding_info = ollama_client.get_paper_embeddings(file_path)
         embeddings = embedding_info.get("embeddings", [])
         model_name = embedding_info.get("model_name", "")
         model_version = embedding_info.get("model_version", "")
