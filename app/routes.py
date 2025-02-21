@@ -17,6 +17,7 @@ from modules.ollama import ollama_client
 bp = Blueprint("main", __name__)
 CORS(bp)  # Enable CORS for all routes in this blueprint
 
+
 @bp.route("/")
 def home():
     return jsonify({"message": "API is running"})
@@ -77,7 +78,7 @@ def list_papers():
             # Format the response to exclude large embedding vectors
             formatted_papers = [
                 {
-                    "paper_id": paper["paper_id"],
+                    "paper_id": paper["id"],
                     "title": paper["title"],
                     "authors": paper["authors"],
                     "similarity": paper["similarity"],
