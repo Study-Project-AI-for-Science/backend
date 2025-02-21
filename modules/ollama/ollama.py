@@ -13,6 +13,7 @@ import time
 import logging
 from typing import List, Optional
 import faker
+import pymupdf  # Changed from fitz to pymupdf
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -85,8 +86,8 @@ def _send_request_to_ollama(prompt: str, model: str = OLLAMA_MODEL, stream: bool
 
 def _extract_text_from_pdf(pdf_path: str) -> str:
     """
-    Extracts text content from a PDF file.  Uses a robust library like
-    PyMuPDF (fitz) for better accuracy and handling of various PDF formats.
+    Extracts text content from a PDF file using PyMuPDF for better accuracy
+    and handling of various PDF formats.
 
     Args:
         pdf_path: Path to the PDF file.
@@ -96,19 +97,17 @@ def _extract_text_from_pdf(pdf_path: str) -> str:
 
     Raises:
         FileNotFoundError: If the PDF file does not exist.
-        Exception:  For other PDF parsing errors.
+        Exception: For other PDF parsing errors.
     """
     try:
-        import fitz  # PyMuPDF
-
-        with fitz.open(pdf_path) as doc:
+        with pymupdf.open(pdf_path) as doc:
             text = ""
             for page in doc:
                 text += page.get_text()
             return text
-    except FileNotFoundError:
+    except pymupdf.FileNotFoundError as err:
         logger.error(f"PDF file not found: {pdf_path}")
-        raise
+        raise FileNotFoundError(f"File not found: {pdf_path}") from err
     except Exception as e:
         logger.error(f"Error extracting text from PDF: {e}")
         raise
@@ -119,7 +118,7 @@ def _extract_text_from_pdf(pdf_path: str) -> str:
 
 #! Expecting get_paper_embeddings to return a dict with keys:
 #! "embeddings": list of embeddings, "model_name": str, "model_version": str.
-def get_paper_embeddings(pdf_path: str) -> Optional[List[float]]:  # TODO: needs to be implemented
+def get_paper_embeddings(pdf_path: str) -> Optional[dict]:
     """
     Gets the embeddings for a given PDF paper.
 
@@ -140,26 +139,25 @@ def get_paper_embeddings(pdf_path: str) -> Optional[List[float]]:  # TODO: needs
             return None
 
         # Send the extracted text to Ollama for embeddings
-        embeddings, model_name, model_version = _send_request_to_ollama(text_content)
-        
+        embeddings = _send_request_to_ollama(text_content)
+
         if embeddings:
             return {
-                "embeddings": embeddings, #List[float]
-                "model_name": model_name, #str
-                "model_version": model_version #str
+                "embeddings": embeddings,  # List[float]
+                "model_name": OLLAMA_MODEL,  # str
+                "model_version": "v1",  # str
             }
         else:
             logger.error(f"Error generating embeddings for PDF: {pdf_path}")
             return None
 
     except FileNotFoundError:
-        raise  # Re-raise to be handled by caller
+        raise
     except Exception as e:
         logger.error(f"Error in get_paper_embeddings: {e}")
-        raise  # Re-raise general exception
+        raise
 
 
-# TODO: Needs to be implemented
 def get_query_embeddings(query_string: str) -> Optional[List[float]]:
     """
     Gets the embeddings for a given query string.
@@ -179,13 +177,13 @@ def get_query_embeddings(query_string: str) -> Optional[List[float]]:
         logger.error("Query string cannot be empty.")
         raise ValueError("Query string cannot be empty.")
 
-    try: 
-        # saves the embeddings in a dictionary ("embeddings": List[float], "model_name": str, "model_version": str)
+    try:
         embeddings = _send_request_to_ollama(query_string)
         if embeddings is None:
             logger.error(f"Error generating embeddings from Ollama for query: {query_string}")
+            return None
 
-        return embeddings["embeddings"] # extracts the embeddings as a list of floats from the dictionary
+        return embeddings  # _send_request_to_ollama already returns the list of embeddings
 
     except Exception as e:
         logger.error(f"Error in get_query_embeddings: {e}")
