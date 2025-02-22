@@ -11,8 +11,9 @@ import psycopg
 from psycopg.rows import dict_row
 import logging
 from dotenv import load_dotenv
+from uuid_extensions import uuid7str as uuid7
 
-from modules.ollama import ollama
+from modules.ollama import ollama_client
 from modules.storage import storage
 
 load_dotenv()
@@ -237,14 +238,14 @@ def paper_insert(file_path: str, title: str, authors: str):
 
         # If title or authors is empty, fill missing info using paper_get_info
         if not title or not authors:
-            info = ollama.get_paper_info(file_path)
+            info = ollama_client.get_paper_info(file_path)
             if not title:
                 title = info.get("title", title)
             if not authors:
                 authors = info.get("authors", authors)
 
         # Generate embeddings using the file directly
-        embedding_info = ollama.get_paper_embeddings(file_path)
+        embedding_info = ollama_client.get_paper_embeddings(file_path)
         embeddings = embedding_info.get("embeddings", [])
         model_name = embedding_info.get("model_name", "")
         model_version = embedding_info.get("model_version", "")
@@ -255,13 +256,14 @@ def paper_insert(file_path: str, title: str, authors: str):
 
         with psycopg.connect(POSTGRES_URL, row_factory=dict_row) as conn:
             with conn.cursor() as cur:
+                # Generate a new UUID7 for the paper
+                paper_id = uuid7()
+
                 paper_insert_query = """
-                    INSERT INTO papers (title, authors, file_url, file_hash)
-                    VALUES (%s, %s, %s, %s)
-                    RETURNING id;
+                    INSERT INTO papers (id, title, authors, file_url, file_hash)
+                    VALUES (%s, %s, %s, %s, %s);
                 """
-                cur.execute(paper_insert_query, (title, authors, file_url, file_hash))
-                paper_id = cur.fetchone()[0]
+                cur.execute(paper_insert_query, (paper_id, title, authors, file_url, file_hash))
 
                 # Insert one record per embedding
                 embed_insert_query = """
@@ -320,11 +322,11 @@ def paper_get_similar_to_query(query_embedding: list, limit: int = 10, similarit
                                pe.model_name, 
                                pe.model_version, 
                                pe.created_at, 
-                               (pe.embedding <=> %s) AS similarity
+                               (pe.embedding <=> %s::vector) AS similarity
                         FROM paper_embeddings pe
                         JOIN papers p ON p.id = pe.paper_id
-                        WHERE (pe.embedding <=> %s) <= %s
-                        ORDER BY (pe.embedding <=> %s)
+                        WHERE (pe.embedding <=> %s::vector) <= %s
+                        ORDER BY (pe.embedding <=> %s::vector)
                         LIMIT %s;
                     """
                     cur.execute(query, (query_embedding, query_embedding, similarity_dropout, query_embedding, limit))
@@ -335,10 +337,10 @@ def paper_get_similar_to_query(query_embedding: list, limit: int = 10, similarit
                                pe.model_name, 
                                pe.model_version, 
                                pe.created_at, 
-                               (pe.embedding <=> %s) AS similarity
+                               (pe.embedding <=> %s::vector) AS similarity
                         FROM paper_embeddings pe
                         JOIN papers p ON p.id = pe.paper_id
-                        ORDER BY (pe.embedding <=> %s)
+                        ORDER BY (pe.embedding <=> %s::vector)
                         LIMIT %s;
                     """
                     cur.execute(query, (query_embedding, query_embedding, limit))

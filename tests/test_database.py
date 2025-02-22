@@ -46,7 +46,12 @@ def mock_storage():
 
 @pytest.fixture
 def mock_ollama():
-    with patch("modules.database.database.ollama") as mock:
+    with patch("modules.database.database.ollama_client") as mock:
+        mock.get_paper_embeddings.return_value = {
+            "embeddings": [[0.1, 0.2]],
+            "model_name": "test-model",
+            "model_version": "1.0",
+        }
         yield mock
 
 
@@ -90,16 +95,20 @@ def test_paper_find_not_found(mock_psycopg):
 def test_paper_insert_success(mock_psycopg, mock_storage, mock_ollama, mock_file_hash, sample_paper):
     """Test successful paper insertion"""
     cursor = mock_psycopg.connect().cursor().__enter__()
-    cursor.fetchone.side_effect = [None, [TEST_PAPER_ID]]  # First None for duplicate check, then ID return
+    cursor.fetchone.side_effect = [None]  # Only need None for duplicate check
     mock_storage.upload_file.return_value = TEST_FILE_URL
     mock_ollama.get_paper_embeddings.return_value = {
-        "embeddings": [[0.1, 0.2]],
+        "embeddings": [[0.1, 0.2], [0.2, 0.3]],
         "model_name": "test-model",
         "model_version": "1.0",
     }
 
     result = paper_insert(TEST_FILE_PATH, TEST_TITLE, TEST_AUTHORS)
-    assert result == TEST_PAPER_ID
+
+    # Verify the result is a UUID string
+    assert isinstance(result, str)
+    assert len(result) == 36  # UUID string length
+    assert result.count("-") == 4  # UUID format check
 
     mock_storage.upload_file.assert_called_once_with(TEST_FILE_PATH)
     mock_ollama.get_paper_embeddings.assert_called_once()

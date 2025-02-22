@@ -20,9 +20,11 @@ dependencies = [
     "python-dotenv",
     "Werkzeug",
     "requests>=2.32.3",
-    "fitz>=0.0.1.dev2",
     "faker>=36.1.1",
     "gunicorn>=21.2.0",
+    "transformers>=4.49.0",
+    "pymupdf>=1.25.3",
+    "ollama>=0.4.7",
     "flask-cors>=5.0.0",
 ]
 
@@ -42,7 +44,12 @@ dev = [
 
 [tool.pytest.ini_options]
 minversion = "8.3.4"
-addopts = "-ra -q"
+addopts = "-ra -v"
 testpaths = [
     "tests",
+]
+filterwarnings = [
+    "ignore:builtin type SwigPyPacked has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type SwigPyObject has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning"
 ]

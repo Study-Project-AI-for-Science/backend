@@ -12,10 +12,11 @@ from modules.database.database import (
     DuplicatePaperError,
 )
 from modules.storage.storage import S3UploadError
-from modules.ollama import ollama
+from modules.ollama import ollama_client
 
 bp = Blueprint("main", __name__)
 CORS(bp)  # Enable CORS for all routes in this blueprint
+
 
 @bp.route("/")
 def home():
@@ -71,13 +72,13 @@ def list_papers():
     try:
         if query:
             # Generate embedding for the search query
-            query_embedding = ollama.get_query_embeddings(query)
+            query_embedding = ollama_client.get_query_embeddings(query)
             # Search for similar papers
             papers = db.paper_get_similar_to_query(query_embedding)
             # Format the response to exclude large embedding vectors
             formatted_papers = [
                 {
-                    "paper_id": paper["paper_id"],
+                    "paper_id": paper["id"],
                     "title": paper["title"],
                     "authors": paper["authors"],
                     "similarity": paper["similarity"],

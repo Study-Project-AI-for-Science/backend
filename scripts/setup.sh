@@ -32,4 +32,9 @@ uv run "$SCRIPT_DIR/create_bucket.py"
 echo "Running migrations..."
 uv run "$SCRIPT_DIR/run_migrations.py"
 
+
 echo "Setup completed successfully!"
+
+echo "Starting Flask backend..."
+cd "$(dirname "$SCRIPT_DIR")"  # Move to project root
+FLASK_ENV=development uv run run.py

@@ -25,3 +25,13 @@ services:
     volumes:
       - ./volumes/minio/data:/data
     command: server /data --console-address ":9001"
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: no
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./volumes/ollama:/root/.ollama
+
