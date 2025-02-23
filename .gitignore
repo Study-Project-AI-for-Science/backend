@@ -313,3 +313,6 @@ __MACOSX/
 
 # Own testing files
 ._**
+
+# Jupyter Notebooks
+*.ipynb
