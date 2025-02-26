@@ -1,7 +1,14 @@
+import logging
 from typing import Generator, Optional, List
 import arxiv
 import re
 import pymupdf
+
+# Set up logging
+logger = logging.getLogger(__name__)
+
+# Initialize global client
+client = arxiv.Client()
 
 
 class ArxivRetrievalError(Exception):
@@ -41,14 +48,23 @@ def _search_arxiv_id(arxiv_id: str) -> Optional[arxiv.Result]:
     Raises:
         ArxivRetrievalError: If there's an error querying the arXiv API.
     """
+    logger.debug(f"Searching for paper with arXiv ID: {arxiv_id}")
     try:
-        results = arxiv.query(id_list=[arxiv_id])
-        return next(results, None)
+        search = arxiv.Search(id_list=[arxiv_id])
+        results = client.results(search)
+        result = next(results, None)
+        if result:
+            logger.info(f"Found paper with arXiv ID: {arxiv_id}")
+        else:
+            logger.warning(f"No paper found with arXiv ID: {arxiv_id}")
+        return result
     except Exception as e:
+        logger.error(f"Error searching arXiv ID {arxiv_id}: {str(e)}")
         raise ArxivRetrievalError(f"Error searching arXiv ID {arxiv_id}: {str(e)}") from e
 
 
 def _search_arxiv_metadata(authors: str, title: str) -> Optional[arxiv.Result]:
+    # This actually doesn't really work well
     """
     Search for a paper on arXiv using author and title information.
 
@@ -62,6 +78,7 @@ def _search_arxiv_metadata(authors: str, title: str) -> Optional[arxiv.Result]:
     Raises:
         ArxivRetrievalError: If there's an error querying the arXiv API.
     """
+    logger.debug(f"Searching for paper with title: {title} and authors: {authors}")
     try:
         filters = []
         if authors:
@@ -69,9 +86,21 @@ def _search_arxiv_metadata(authors: str, title: str) -> Optional[arxiv.Result]:
         if title:
             filters.append(f"ti:{title}")
         query = " AND ".join(filters)
-        results = arxiv.query(query=query)
-        return next(results, None)
+        search = arxiv.Search(
+            query=query,
+            max_results=1,
+            sort_by=arxiv.SortCriterion.Relevance,
+            sort_order=arxiv.SortOrder.Descending
+        )
+        results = client.results(search)
+        result = next(results, None)
+        if result:
+            logger.info("Found paper matching metadata search")
+        else:
+            logger.warning("No paper found matching metadata search")
+        return result
     except Exception as e:
+        logger.error(f"Error searching arXiv with metadata: {str(e)}")
         raise ArxivRetrievalError(f"Error searching arXiv with metadata: {str(e)}") from e
 
 
@@ -89,9 +118,17 @@ def _search_arxiv_all(query: str, max_results: int) -> Generator[arxiv.Result, N
     Raises:
         ArxivRetrievalError: If there's an error querying the arXiv API.
     """
+    logger.debug(f"Performing general search with query: {query}, max_results: {max_results}")
     try:
-        return arxiv.query(query=query, max_results=max_results)
+        search = arxiv.Search(
+            query=query,
+            max_results=max_results,
+            sort_by=arxiv.SortCriterion.Relevance,
+            sort_order=arxiv.SortOrder.Descending
+        )
+        return client.results(search)
     except Exception as e:
+        logger.error(f"Error searching arXiv with query '{query}': {str(e)}")
         raise ArxivRetrievalError(f"Error searching arXiv with query '{query}': {str(e)}") from e
 
 
@@ -110,12 +147,17 @@ def _download_arxiv_id(arxiv_id: str, output_dir: str) -> Optional[str]:
         ArxivPaperNotFoundError: If the paper cannot be found.
         ArxivDownloadError: If there's an error downloading the paper.
     """
+    logger.debug(f"Attempting to download paper with ID {arxiv_id} to {output_dir}")
     paper = _search_arxiv_id(arxiv_id)
     if not paper:
+        logger.error(f"Paper with ID {arxiv_id} not found")
         raise ArxivPaperNotFoundError(f"Paper with ID {arxiv_id} not found")
     try:
-        return paper.download_pdf(output_dir)
+        path = paper.download_pdf(output_dir)
+        logger.info(f"Successfully downloaded paper {arxiv_id} to {path}")
+        return path
     except Exception as e:
+        logger.error(f"Error downloading paper {arxiv_id}: {str(e)}")
         raise ArxivDownloadError(f"Error downloading paper {arxiv_id}: {str(e)}") from e
 
 
@@ -133,9 +175,13 @@ def _download_arxiv_paper(paper: arxiv.Result, output_dir: str) -> str:
     Raises:
         ArxivDownloadError: If there's an error downloading the paper.
     """
+    logger.debug(f"Attempting to download paper {paper.title} to {output_dir}")
     try:
-        return paper.download_pdf(output_dir)
+        path = paper.download_pdf(output_dir)
+        logger.info(f"Successfully downloaded paper to {path}")
+        return path
     except Exception as e:
+        logger.error(f"Error downloading paper: {str(e)}")
         raise ArxivDownloadError(f"Error downloading paper: {str(e)}") from e
 
 
@@ -161,6 +207,9 @@ def _get_metadata_arxiv_paper(paper: arxiv.Result) -> dict:
         "published_date": paper.published,
         "updated_date": paper.updated,
     }
+    
+    
+# MAIN FUNCTIONS
 
 
 def extract_arxiv_ids(text: str) -> List[str]:
@@ -178,6 +227,7 @@ def extract_arxiv_ids(text: str) -> List[str]:
 
 
 def paper_get_metadata(file_path: str) -> Optional[dict]:
+    #TODO add option that gives first page for title/metadata parsing to LLM and afterward try to retrieve from arxiv
     """
     Extract metadata from a PDF file, attempting multiple methods:
     1. Look for arXiv ID in filename
@@ -194,26 +244,35 @@ def paper_get_metadata(file_path: str) -> Optional[dict]:
         PDFExtractionError: If there's an error processing the PDF file.
         ArxivRetrievalError: If there's an error querying the arXiv API.
     """
+    logger.debug(f"Attempting to extract metadata from {file_path}")
+
     # Try to find arxiv ID in filename
     arxiv_ids = extract_arxiv_ids(file_path)
     if arxiv_ids:
+        logger.debug(f"Found arXiv ID in filename: {arxiv_ids[0]}")
         try:
             paper = _search_arxiv_id(arxiv_ids[0])
             if paper:
+                logger.info("Successfully retrieved metadata using arXiv ID from filename")
                 return _get_metadata_arxiv_paper(paper)
         except ArxivRetrievalError:
-            pass  # Continue with other methods if this fails
+            logger.warning("Failed to retrieve metadata using arXiv ID from filename")
+            pass
 
     # Try to find paper using filename
+    logger.debug("Attempting to find paper using filename")
     try:
         results = _search_arxiv_all(file_path[:-4], 15)
         for paper in results:
             if paper.title in file_path:
+                logger.info("Successfully retrieved metadata using filename search")
                 return _get_metadata_arxiv_paper(paper)
     except ArxivRetrievalError:
-        pass  # Continue with other methods if this fails
+        logger.warning("Failed to retrieve metadata using filename search")
+        pass
 
     # Try to find arxiv ID in PDF content
+    logger.debug("Attempting to find arXiv ID in PDF content")
     try:
         doc = pymupdf.open(file_path)
         if doc.page_count > 0:
@@ -221,15 +280,21 @@ def paper_get_metadata(file_path: str) -> Optional[dict]:
             text = first_page.get_text("text")
             arxiv_ids_from_text = extract_arxiv_ids(text)
             if arxiv_ids_from_text:
+                logger.debug(f"Found arXiv ID in PDF content: {arxiv_ids_from_text[0]}")
                 try:
                     paper = _search_arxiv_id(arxiv_ids_from_text[0])
                     if paper:
+                        logger.info("Successfully retrieved metadata using arXiv ID from PDF content")
                         return _get_metadata_arxiv_paper(paper)
                 except ArxivRetrievalError:
+                    logger.warning("Failed to retrieve metadata using arXiv ID from PDF content")
                     pass
     except Exception as e:
-        raise PDFExtractionError(f"Error extracting information from PDF {file_path}: {str(e)}") from e
+        error_msg = f"Error extracting information from PDF {file_path}: {str(e)}"
+        logger.error(error_msg)
+        raise PDFExtractionError(error_msg) from e
 
+    logger.warning(f"Could not extract metadata from {file_path}")
     return None
 
 
@@ -248,13 +313,16 @@ def paper_download_arxiv_id(arxiv_id: str, output_dir: str) -> str:
         ArxivPaperNotFoundError: If the paper cannot be found.
         ArxivDownloadError: If there's an error downloading the paper.
     """
+    logger.debug(f"Attempting to download paper with ID {arxiv_id} to {output_dir}")
     paper_path = _download_arxiv_id(arxiv_id, output_dir)
     if not paper_path:
+        logger.error(f"Paper with ID {arxiv_id} not found")
         raise ArxivPaperNotFoundError(f"Paper with ID {arxiv_id} not found")
+    logger.info(f"Successfully downloaded paper {arxiv_id} to {paper_path}")
     return paper_path
 
 
-def paper_download_arxiv_metadata(authors: str, title: str, output_dir: str) -> str:
+def paper_download_arxiv_metadata(authors: str = "", title: str = "", output_dir: str = ".") -> str:
     """
     Download a paper from arXiv using author and title information.
 
@@ -270,12 +338,19 @@ def paper_download_arxiv_metadata(authors: str, title: str, output_dir: str) -> 
         ArxivPaperNotFoundError: If the paper cannot be found.
         ArxivDownloadError: If there's an error downloading the paper.
     """
+    logger.debug(f"Attempting to download paper with title '{title}' by {authors}")
     title = title.replace(":", "\\:")
     paper = _search_arxiv_metadata(authors, title)
     if not paper:
-        raise ArxivPaperNotFoundError(f"Paper with title '{title}' by {authors} not found")
+        error_msg = f"Paper with title '{title}' by {authors} not found"
+        logger.error(error_msg)
+        raise ArxivPaperNotFoundError(error_msg)
 
     paper_path = _download_arxiv_paper(paper, output_dir)
     if not paper_path:
-        raise ArxivDownloadError(f"Error downloading paper with title '{title}'")
+        error_msg = f"Error downloading paper with title '{title}'"
+        logger.error(error_msg)
+        raise ArxivDownloadError(error_msg)
+    
+    logger.info(f"Successfully downloaded paper to {paper_path}")
     return paper_path
