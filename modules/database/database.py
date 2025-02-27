@@ -193,7 +193,15 @@ def paper_get_embeddings(paper_id: str) -> dict:
         raise DatabaseError(f"Database error while retrieving embeddings: {str(e)}") from e
 
 
-def paper_insert(file_path: str, title: str, authors: str):
+def paper_insert(
+    file_path: str,
+    title: str,
+    authors: str,
+    abstract: str = None,
+    paper_url: str = None,
+    published: str = None,
+    updated: str = None,
+):
     """
     Inserts a new paper and its embedding(s) into the database.
 
@@ -206,6 +214,10 @@ def paper_insert(file_path: str, title: str, authors: str):
         file_path (str): The local path to the PDF file.
         title (str): The title of the paper.
         authors (str): The authors of the paper.
+        abstract (str, optional): The abstract of the paper.
+        paper_url (str, optional): The URL where the paper is available online.
+        published (str, optional): The publication date of the paper.
+        updated (str, optional): The last update date of the paper.
 
     Returns:
         The paper_id (str) of the newly inserted paper.
@@ -243,6 +255,8 @@ def paper_insert(file_path: str, title: str, authors: str):
                 title = info.get("title", title)
             if not authors:
                 authors = info.get("authors", authors)
+            if not abstract:
+                abstract = info.get("abstract", abstract)
 
         # Generate embeddings using the file directly
         embedding_info = ollama_client.get_paper_embeddings(file_path)
@@ -260,10 +274,14 @@ def paper_insert(file_path: str, title: str, authors: str):
                 paper_id = uuid7()
 
                 paper_insert_query = """
-                    INSERT INTO papers (id, title, authors, file_url, file_hash)
-                    VALUES (%s, %s, %s, %s, %s);
+                    INSERT INTO papers (id, title, authors, file_url, file_hash, 
+                                        abstract, online_url, published_date, updated_date)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);
                 """
-                cur.execute(paper_insert_query, (paper_id, title, authors, file_url, file_hash))
+                cur.execute(
+                    paper_insert_query,
+                    (paper_id, title, authors, file_url, file_hash, abstract, paper_url, published, updated),
+                )
 
                 # Insert one record per embedding
                 embed_insert_query = """
@@ -498,9 +516,10 @@ def paper_list_all(page: int = 1, page_size: int = 10) -> dict:
                 cur.execute("SELECT COUNT(*) as total FROM papers;")
                 total = cur.fetchone()["total"]
 
-                # Get paginated results
+                # Get paginated results with additional metadata fields
                 query = """
-                    SELECT id, title, authors, file_url, created_at
+                    SELECT id, title, authors, file_url, abstract, online_url,
+                           published_date, updated_date, created_at
                     FROM papers
                     ORDER BY created_at DESC
                     LIMIT %s OFFSET %s;

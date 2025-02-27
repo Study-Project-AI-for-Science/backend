@@ -87,10 +87,7 @@ def _search_arxiv_metadata(authors: str, title: str) -> Optional[arxiv.Result]:
             filters.append(f"ti:{title}")
         query = " AND ".join(filters)
         search = arxiv.Search(
-            query=query,
-            max_results=1,
-            sort_by=arxiv.SortCriterion.Relevance,
-            sort_order=arxiv.SortOrder.Descending
+            query=query, max_results=1, sort_by=arxiv.SortCriterion.Relevance, sort_order=arxiv.SortOrder.Descending
         )
         results = client.results(search)
         result = next(results, None)
@@ -124,7 +121,7 @@ def _search_arxiv_all(query: str, max_results: int) -> Generator[arxiv.Result, N
             query=query,
             max_results=max_results,
             sort_by=arxiv.SortCriterion.Relevance,
-            sort_order=arxiv.SortOrder.Descending
+            sort_order=arxiv.SortOrder.Descending,
         )
         return client.results(search)
     except Exception as e:
@@ -207,8 +204,8 @@ def _get_metadata_arxiv_paper(paper: arxiv.Result) -> dict:
         "published_date": paper.published,
         "updated_date": paper.updated,
     }
-    
-    
+
+
 # MAIN FUNCTIONS
 
 
@@ -227,7 +224,7 @@ def extract_arxiv_ids(text: str) -> List[str]:
 
 
 def paper_get_metadata(file_path: str) -> Optional[dict]:
-    #TODO add option that gives first page for title/metadata parsing to LLM and afterward try to retrieve from arxiv
+    # TODO add option that gives first page for title/metadata parsing to LLM and afterward try to retrieve from arxiv
     """
     Extract metadata from a PDF file, attempting multiple methods:
     1. Look for arXiv ID in filename
@@ -238,10 +235,9 @@ def paper_get_metadata(file_path: str) -> Optional[dict]:
         file_path (str): Path to the PDF file.
 
     Returns:
-        Optional[dict]: Dictionary containing paper metadata if found, None otherwise.
+        Optional[dict]: Dictionary containing paper metadata if found, empty dict if not found.
 
     Raises:
-        PDFExtractionError: If there's an error processing the PDF file.
         ArxivRetrievalError: If there's an error querying the arXiv API.
     """
     logger.debug(f"Attempting to extract metadata from {file_path}")
@@ -292,10 +288,11 @@ def paper_get_metadata(file_path: str) -> Optional[dict]:
     except Exception as e:
         error_msg = f"Error extracting information from PDF {file_path}: {str(e)}"
         logger.error(error_msg)
-        raise PDFExtractionError(error_msg) from e
+        # Return empty dict instead of raising an exception
+        # This will allow the system to continue with default values
 
     logger.warning(f"Could not extract metadata from {file_path}")
-    return None
+    return {}
 
 
 def paper_download_arxiv_id(arxiv_id: str, output_dir: str) -> str:
@@ -351,6 +348,6 @@ def paper_download_arxiv_metadata(authors: str = "", title: str = "", output_dir
         error_msg = f"Error downloading paper with title '{title}'"
         logger.error(error_msg)
         raise ArxivDownloadError(error_msg)
-    
+
     logger.info(f"Successfully downloaded paper to {paper_path}")
     return paper_path

@@ -7,7 +7,6 @@ from modules.Retriever.arxiv.arxiv_retriever import (
     extract_arxiv_ids,
     ArxivPaperNotFoundError,
     ArxivDownloadError,
-    PDFExtractionError,
 )
 
 # Test data
@@ -173,11 +172,11 @@ def test_paper_get_metadata_not_found(mock_arxiv, mock_arxiv_client, mock_pymupd
     mock_arxiv_client.results.return_value = iter([])
     mock_pymupdf.open().load_page().get_text.return_value = "Content with no arXiv ID"
     result = paper_get_metadata("unknown_paper.pdf")
-    assert result is None
+    assert result == {}
 
 
 def test_paper_get_metadata_pdf_error(mock_pymupdf):
     """Test metadata extraction with PDF reading error"""
     mock_pymupdf.open.side_effect = Exception("PDF error")
-    with pytest.raises(PDFExtractionError):
-        paper_get_metadata("corrupted.pdf")
+    result = paper_get_metadata("corrupted.pdf")
+    assert result == {}
