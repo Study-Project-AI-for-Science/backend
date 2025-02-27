@@ -13,6 +13,7 @@ from modules.database.database import (
 )
 from modules.storage.storage import S3UploadError
 from modules.ollama import ollama_client
+from modules.Retriever.arxiv import arxiv_retriever
 
 bp = Blueprint("main", __name__)
 CORS(bp)  # Enable CORS for all routes in this blueprint
@@ -42,8 +43,17 @@ def create_paper():
         # Save the uploaded file temporarily
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
             file.save(temp_file.name)
+            # Try to get metadata from arxiv
+            paper_metadata = arxiv_retriever.paper_get_metadata(temp_file.name)
+            title: str = paper_metadata.get("title", title)
+            authors: str = paper_metadata.get("authors", authors)
+            abstract: str = paper_metadata.get("abstract", "")
+            paper_url: str = paper_metadata.get("url", "")
+            published: str = paper_metadata.get("published_date", "")
+            updated: str = paper_metadata.get("updated_date", "")
+
             # Insert the paper into the database
-            paper_id = db.paper_insert(temp_file.name, title, authors)
+            paper_id = db.paper_insert(temp_file.name, title, authors, abstract, paper_url, published, updated)
             # Clean up the temporary file
             os.unlink(temp_file.name)
 
@@ -81,6 +91,11 @@ def list_papers():
                     "paper_id": paper["id"],
                     "title": paper["title"],
                     "authors": paper["authors"],
+                    "abstract": paper.get("abstract", ""),
+                    "online_url": paper.get("online_url", ""),
+                    "published_date": paper.get("published_date", ""),
+                    "updated_date": paper.get("updated_date", ""),
+                    "created_at": paper.get("created_at", ""),
                     "similarity": paper["similarity"],
                 }
                 for paper in papers

@@ -1,4 +1,5 @@
 import pytest
+import datetime
 from unittest.mock import patch, MagicMock
 from modules.database.database import (
     paper_find,
@@ -18,6 +19,10 @@ TEST_TITLE = "Test Paper"
 TEST_AUTHORS = "Test Author"
 TEST_FILE_URL = "http://localhost:9000/papers/123/test.pdf"
 TEST_FILE_HASH = "abcdef1234567890"
+TEST_ABSTRACT = "This is a test paper abstract"
+TEST_PAPER_URL = "http://example.com/paper"
+TEST_PUBLISHED = datetime.datetime(2023, 1, 1, 0, 0, 0, tzinfo=datetime.timezone.utc)
+TEST_UPDATED = datetime.datetime(2023, 2, 1, 0, 0, 0, tzinfo=datetime.timezone.utc)
 
 
 @pytest.fixture
@@ -70,6 +75,10 @@ def sample_paper():
         "authors": TEST_AUTHORS,
         "file_url": TEST_FILE_URL,
         "file_hash": TEST_FILE_HASH,
+        "abstract": TEST_ABSTRACT,
+        "online_url": TEST_PAPER_URL,
+        "published_date": TEST_PUBLISHED,
+        "updated_date": TEST_UPDATED,
     }
 
 
@@ -99,6 +108,37 @@ def test_paper_insert_success(mock_psycopg, mock_storage, mock_ollama, mock_file
     mock_storage.upload_file.return_value = TEST_FILE_URL
     mock_ollama.get_paper_embeddings.return_value = {
         "embeddings": [[0.1, 0.2], [0.2, 0.3]],
+        "model_name": "test-model",
+        "model_version": "1.0",
+    }
+
+    result = paper_insert(
+        TEST_FILE_PATH,
+        TEST_TITLE,
+        TEST_AUTHORS,
+        abstract=TEST_ABSTRACT,
+        paper_url=TEST_PAPER_URL,
+        published=TEST_PUBLISHED,
+        updated=TEST_UPDATED,
+    )
+
+    # Verify the result is a UUID string
+    assert isinstance(result, str)
+    assert len(result) == 36  # UUID string length
+    assert result.count("-") == 4  # UUID format check
+
+    mock_storage.upload_file.assert_called_once_with(TEST_FILE_PATH)
+    mock_ollama.get_paper_embeddings.assert_called_once()
+    assert cursor.execute.call_count >= 2
+
+
+def test_paper_insert_minimal(mock_psycopg, mock_storage, mock_ollama, mock_file_hash):
+    """Test paper insertion with only required fields"""
+    cursor = mock_psycopg.connect().cursor().__enter__()
+    cursor.fetchone.side_effect = [None]  # Only need None for duplicate check
+    mock_storage.upload_file.return_value = TEST_FILE_URL
+    mock_ollama.get_paper_embeddings.return_value = {
+        "embeddings": [[0.1, 0.2]],
         "model_name": "test-model",
         "model_version": "1.0",
     }
