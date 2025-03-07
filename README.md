@@ -1,5 +1,4 @@
 # Backend
-!Tested only on Mac! <br>
 
 ## How to start it up
 ### Startup database for local development
