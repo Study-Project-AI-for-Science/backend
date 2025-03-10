@@ -1,8 +1,10 @@
 import logging
+import tarfile
 from typing import Generator, Optional, List
 import arxiv
 import re
 import pymupdf
+import os
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -34,6 +36,30 @@ class PDFExtractionError(Exception):
 
     pass
 
+class ExtractionError(Exception):
+    """Raised when there's an error extracting a tar.gz file."""
+    pass
+
+def extract_tar_gz(file_path: str, output_dir: str) -> str:
+    """
+    Extract a tar.gz file to a directory.
+
+    Args:
+        file_path (str): Path to the tar.gz file.
+        output_dir (str): Directory where the contents should be extracted.
+
+    Returns:
+        str: Path to the extracted directory.
+    """
+    logger.debug(f"Extracting {file_path} to {output_dir}")
+    try:
+        with tarfile.open(file_path, "r:gz") as tar:
+            tar.extractall(output_dir)
+            logger.info(f"Successfully extracted {file_path} to {output_dir}")
+            return output_dir
+    except Exception as e:
+        logger.error(f"Error extracting {file_path}: {str(e)}")
+        raise ExtractionError(f"Error extracting {file_path}: {str(e)}") from e
 
 def _search_arxiv_id(arxiv_id: str) -> Optional[arxiv.Result]:
     """
@@ -149,13 +175,7 @@ def _download_arxiv_id(arxiv_id: str, output_dir: str) -> Optional[str]:
     if not paper:
         logger.error(f"Paper with ID {arxiv_id} not found")
         raise ArxivPaperNotFoundError(f"Paper with ID {arxiv_id} not found")
-    try:
-        path = paper.download_pdf(output_dir)
-        logger.info(f"Successfully downloaded paper {arxiv_id} to {path}")
-        return path
-    except Exception as e:
-        logger.error(f"Error downloading paper {arxiv_id}: {str(e)}")
-        raise ArxivDownloadError(f"Error downloading paper {arxiv_id}: {str(e)}") from e
+    return _download_arxiv_paper(paper, output_dir)
 
 
 def _download_arxiv_paper(paper: arxiv.Result, output_dir: str) -> str:
@@ -175,11 +195,20 @@ def _download_arxiv_paper(paper: arxiv.Result, output_dir: str) -> str:
     logger.debug(f"Attempting to download paper {paper.title} to {output_dir}")
     try:
         path = paper.download_pdf(output_dir)
-        logger.info(f"Successfully downloaded paper to {path}")
+        paper.download_source(output_dir)
+        tar_gz_path = path[:-4] + ".tar.gz"
+        if os.path.exists(tar_gz_path):
+            try:
+                extract_tar_gz(path[:-4] + ".tar.gz", output_dir + "/" + path.split("/")[-1][:-4])
+                os.remove(tar_gz_path)
+                logger.info(f"Deleted archive file {tar_gz_path}")
+            except Exception as e:
+                logger.warning(f"Failed to delete archive file: {str(e)}")
+        logger.info(f"Successfully downloaded paper {paper.get_short_id()} to {path}")
         return path
     except Exception as e:
-        logger.error(f"Error downloading paper: {str(e)}")
-        raise ArxivDownloadError(f"Error downloading paper: {str(e)}") from e
+        logger.error(f"Error downloading paper {paper.get_short_id()}: {str(e)}")
+        raise ArxivDownloadError(f"Error downloading paper {paper.get_short_id()}: {str(e)}") from e
 
 
 def _get_metadata_arxiv_paper(paper: arxiv.Result) -> dict:
