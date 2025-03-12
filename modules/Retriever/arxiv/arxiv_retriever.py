@@ -366,6 +366,7 @@ def paper_download_arxiv_metadata(authors: str = "", title: str = "", output_dir
     """
     logger.debug(f"Attempting to download paper with title '{title}' by {authors}")
     title = title.replace(":", "\\:")
+    title = title.replace("-", "\\-")
     paper = _search_arxiv_metadata(authors, title)
     if not paper:
         error_msg = f"Paper with title '{title}' by {authors} not found"
