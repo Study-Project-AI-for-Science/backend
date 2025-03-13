@@ -11,6 +11,7 @@ from modules.database.database import (
     InvalidUpdateError,
     DuplicatePaperError,
 )
+from modules.latex_parser import reference_parser
 from modules.storage.storage import S3UploadError
 from modules.ollama import ollama_client
 from modules.retriever.arxiv import arxiv_retriever
@@ -57,6 +58,15 @@ def create_paper():
             # Clean up the temporary file
             os.unlink(temp_file.name)
 
+            # TODO: Ensure paper_id exists @tim
+            arxiv_paper_id = paper_metadata.paper_id
+
+            # Extract paper references @tim
+            references = reference_parser.extract_references(arxiv_paper_id) 
+
+            # Insert references into database
+            db.paper_references_insert_many(paper_id, references)
+
         return jsonify({"paper_id": paper_id}), 201
     except DuplicatePaperError as e:
         return jsonify({"error": str(e)}), 409
@@ -67,6 +77,13 @@ def create_paper():
     except DatabaseError as e:
         return jsonify({"error": str(e)}), 500
 
+@bp.route("/papers/<string:paper_id>/references", methods=["GET"])
+def get_paper_references(paper_id):
+    try:
+        references = db.paper_references_list(paper_id)
+        return jsonify(references)
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500
 
 @bp.route("/papers", methods=["GET"])
 def list_papers():

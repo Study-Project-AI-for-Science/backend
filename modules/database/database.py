@@ -533,3 +533,56 @@ def paper_list_all(page: int = 1, page_size: int = 10) -> dict:
     except psycopg.Error as e:
         logger.error(f"Error retrieving paper list: {e}")
         raise DatabaseError(f"Database error while retrieving paper list: {str(e)}") from e
+
+# References
+
+def paper_references_insert_many(paper_id: str, references: list):
+    # TODO: Implement
+    raise NotImplementedError
+
+def paper_references_list(paper_id: str) -> list:
+    """
+    Retrieves all references for a specific paper from the database.
+
+    Description:
+        Queries the "paper_references" table to find all papers that are referenced
+        by the paper with the given `paper_id`.
+
+    Parameters:
+        paper_id (str): The unique identifier of the paper.
+
+    Returns:
+        list: A list of dictionaries containing reference paper metadata.
+
+    Raises:
+        PaperNotFoundError: If the paper with the given ID does not exist.
+        DatabaseError: If a database error occurs during query execution.
+
+    Example:
+        references = paper_references_list("1234abcd")
+    """
+    try:
+        # First check if the paper exists
+        with psycopg.connect(POSTGRES_URL, row_factory=dict_row) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM papers WHERE id = %s", (paper_id,))
+                if cur.fetchone() is None:
+                    raise PaperNotFoundError(f"Paper with ID {paper_id} not found.")
+                
+                # Query to get all references for the paper
+                query = """
+                    SELECT pr.*
+                    FROM paper_references pr
+                    WHERE pr.paper_id = %s
+                """
+                cur.execute(query, (paper_id,))
+                references = cur.fetchall()
+                
+                return references
+                
+    except PaperNotFoundError as e:
+        logger.error(f"Error retrieving references for paper {paper_id}: {e}")
+        raise
+    except psycopg.Error as e:
+        logger.error(f"Database error while retrieving references for paper {paper_id}: {e}")
+        raise DatabaseError(f"Database error while retrieving references: {str(e)}") from e
