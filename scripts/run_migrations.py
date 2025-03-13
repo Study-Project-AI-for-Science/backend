@@ -3,9 +3,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 POSTGRES_URL = os.getenv("POSTGRES_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
-MIGRATIONS_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "../modules/database/migrations")
-)
+MIGRATIONS_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../modules/database/migrations"))
 
 
 def get_applied_migrations(conn):

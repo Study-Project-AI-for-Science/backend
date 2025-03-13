@@ -9,8 +9,6 @@ for both BibTeX files and LaTeX files with \bibitem entries.
 import os
 import pytest
 import tempfile
-from unittest.mock import patch, mock_open
-from pathlib import Path
 
 from modules.latex_parser.reference_parser import ReferenceParser, extract_references
 
@@ -74,12 +72,12 @@ Diederik Kingma and Jimmy Ba.
     @pytest.fixture
     def temp_bibtex_file(self, bibtex_content):
         """Create a temporary BibTeX file for testing."""
-        with tempfile.NamedTemporaryFile(suffix='.bib', delete=False, mode='w+') as f:
+        with tempfile.NamedTemporaryFile(suffix=".bib", delete=False, mode="w+") as f:
             f.write(bibtex_content)
             temp_path = f.name
-        
+
         yield temp_path
-        
+
         # Cleanup
         if os.path.exists(temp_path):
             os.unlink(temp_path)
@@ -87,12 +85,12 @@ Diederik Kingma and Jimmy Ba.
     @pytest.fixture
     def temp_latex_file(self, latex_content):
         """Create a temporary LaTeX file for testing."""
-        with tempfile.NamedTemporaryFile(suffix='.tex', delete=False, mode='w+') as f:
+        with tempfile.NamedTemporaryFile(suffix=".tex", delete=False, mode="w+") as f:
             f.write(latex_content)
             temp_path = f.name
-        
+
         yield temp_path
-        
+
         # Cleanup
         if os.path.exists(temp_path):
             os.unlink(temp_path)
@@ -103,14 +101,14 @@ Diederik Kingma and Jimmy Ba.
         with tempfile.TemporaryDirectory() as temp_dir:
             # Create a BibTeX file
             bib_path = os.path.join(temp_dir, "references.bib")
-            with open(bib_path, 'w') as f:
+            with open(bib_path, "w") as f:
                 f.write(bibtex_content)
-            
+
             # Create a LaTeX file
             tex_path = os.path.join(temp_dir, "paper.tex")
-            with open(tex_path, 'w') as f:
+            with open(tex_path, "w") as f:
                 f.write(latex_content)
-            
+
             yield temp_dir
 
     @pytest.fixture
@@ -210,17 +208,22 @@ Diederik Kingma and Jimmy Ba.
     def test_integration_both_formats(self, temp_paper_dir):
         """Integration test using both formats."""
         references = extract_references(temp_paper_dir)
-        
+
         assert len(references) > 0, "No references extracted from paper directory"
 
         # Check for specific references we expect to find
         reference_ids = {ref["id"].lower() for ref in references}
-        expected_ids = {"smith2020example", "jones2019book", "brown2021tech", 
-                      "vaswani2017attention", "devlin2019bert", "kingma2014adam"}
-        
+        expected_ids = {
+            "smith2020example",
+            "jones2019book",
+            "brown2021tech",
+            "vaswani2017attention",
+            "devlin2019bert",
+            "kingma2014adam",
+        }
+
         # Check if at least some of our expected IDs are found
-        assert any(ref_id in reference_ids for ref_id in expected_ids), \
-            f"None of the expected reference IDs were found. Found: {reference_ids}"
+        assert any(ref_id in reference_ids for ref_id in expected_ids), f"None of the expected reference IDs were found. Found: {reference_ids}"
 
 
 if __name__ == "__main__":

@@ -124,9 +124,7 @@ class ReferenceParser:
 
     # Regular expression to match LaTeX \bibitem entries
     # Captures the optional label, citation key, and content
-    BIBITEM_PATTERN = re.compile(
-        r"\\bibitem(?:\[(.*?)\])?\{(.*?)\}(.*?)(?=\\bibitem|\\end\{thebibliography\}|\Z)", re.DOTALL
-    )
+    BIBITEM_PATTERN = re.compile(r"\\bibitem(?:\[(.*?)\])?\{(.*?)\}(.*?)(?=\\bibitem|\\end\{thebibliography\}|\Z)", re.DOTALL)
 
     def __init__(self):
         """Initialize the parser with an empty dictionary of entries."""
@@ -313,7 +311,7 @@ class ReferenceParser:
             r"In\s+\\textit{([^}]+)}",  # In \textit{journal}
             r'In\s*[\'"]([^\'"]*)[\'"]\.*',  # In "journal"
             r"(?:In |in ){\\it ([^}]+)}",  # In {\it journal}
-            r"(?<=\.)[ \t]+([A-Z][^,\.]*(?:Journal|Proceedings|Transactions|Review|Letters)[^,\.]*)", # journal name
+            r"(?<=\.)[ \t]+([A-Z][^,\.]*(?:Journal|Proceedings|Transactions|Review|Letters)[^,\.]*)",  # journal name
         ]
 
         # Try each pattern until we find a match
@@ -360,9 +358,7 @@ class ReferenceParser:
             fields["volume"] = vol
 
         # Try to extract number/issue
-        number_match = re.search(
-            r"number\s*[=:]*\s*(\d+)|No\.\s*(\d+)|issue\s+(\d+)|issue\s*[=:]*\s*(\d+)", content, re.IGNORECASE
-        )
+        number_match = re.search(r"number\s*[=:]*\s*(\d+)|No\.\s*(\d+)|issue\s+(\d+)|issue\s*[=:]*\s*(\d+)", content, re.IGNORECASE)
         if number_match:
             num = next((g for g in number_match.groups() if g is not None), None)
             if num:
@@ -375,9 +371,7 @@ class ReferenceParser:
             fields["pages"] = pages.replace("–", "-").replace("—", "-")
 
         # Extract DOI if available
-        doi_match = re.search(r"doi\s*[:=]\s*([^\s,]+)", content, re.IGNORECASE) or re.search(
-            r"https?://(?:dx\.)?doi\.org/([^\s,]+)", content
-        )
+        doi_match = re.search(r"doi\s*[:=]\s*([^\s,]+)", content, re.IGNORECASE) or re.search(r"https?://(?:dx\.)?doi\.org/([^\s,]+)", content)
         if doi_match:
             fields["doi"] = doi_match.group(1).strip()
 
@@ -387,9 +381,7 @@ class ReferenceParser:
             fields["url"] = url_match.group(1).strip() if "\\url{" in url_match.group(0) else url_match.group(0)
 
         # Extract arXiv identifier
-        arxiv_match = re.search(r"arXiv:([^\s,}]+)", content) or re.search(
-            r"https?://arxiv\.org/abs/([^\s,}]+)", content
-        )
+        arxiv_match = re.search(r"arXiv:([^\s,}]+)", content) or re.search(r"https?://arxiv\.org/abs/([^\s,}]+)", content)
         if arxiv_match:
             fields["arxiv"] = arxiv_match.group(1).strip()
 

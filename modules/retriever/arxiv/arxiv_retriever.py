@@ -116,9 +116,7 @@ def _search_arxiv_metadata(authors: str, title: str) -> Optional[arxiv.Result]:
         if title:
             filters.append(f"ti:{title}")
         query = " AND ".join(filters)
-        search = arxiv.Search(
-            query=query, max_results=1, sort_by=arxiv.SortCriterion.Relevance, sort_order=arxiv.SortOrder.Descending
-        )
+        search = arxiv.Search(query=query, max_results=1, sort_by=arxiv.SortCriterion.Relevance, sort_order=arxiv.SortOrder.Descending)
         results = client.results(search)
         result = next(results, None)
         if result:

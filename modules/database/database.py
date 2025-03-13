@@ -534,11 +534,14 @@ def paper_list_all(page: int = 1, page_size: int = 10) -> dict:
         logger.error(f"Error retrieving paper list: {e}")
         raise DatabaseError(f"Database error while retrieving paper list: {str(e)}") from e
 
+
 # References
+
 
 def paper_references_insert_many(paper_id: str, references: list):
     # TODO: Implement
     raise NotImplementedError
+
 
 def paper_references_list(paper_id: str) -> list:
     """
@@ -568,7 +571,7 @@ def paper_references_list(paper_id: str) -> list:
                 cur.execute("SELECT 1 FROM papers WHERE id = %s", (paper_id,))
                 if cur.fetchone() is None:
                     raise PaperNotFoundError(f"Paper with ID {paper_id} not found.")
-                
+
                 # Query to get all references for the paper
                 query = """
                     SELECT pr.*
@@ -577,9 +580,9 @@ def paper_references_list(paper_id: str) -> list:
                 """
                 cur.execute(query, (paper_id,))
                 references = cur.fetchall()
-                
+
                 return references
-                
+
     except PaperNotFoundError as e:
         logger.error(f"Error retrieving references for paper {paper_id}: {e}")
         raise
