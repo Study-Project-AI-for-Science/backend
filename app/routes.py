@@ -13,7 +13,7 @@ from modules.database.database import (
 )
 from modules.storage.storage import S3UploadError
 from modules.ollama import ollama_client
-from modules.Retriever.arxiv import arxiv_retriever
+from modules.retriever.arxiv import arxiv_retriever
 
 bp = Blueprint("main", __name__)
 CORS(bp)  # Enable CORS for all routes in this blueprint

@@ -36,9 +36,12 @@ class PDFExtractionError(Exception):
 
     pass
 
+
 class ExtractionError(Exception):
     """Raised when there's an error extracting a tar.gz file."""
+
     pass
+
 
 def extract_tar_gz(file_path: str, output_dir: str) -> str:
     """
@@ -60,6 +63,7 @@ def extract_tar_gz(file_path: str, output_dir: str) -> str:
     except Exception as e:
         logger.error(f"Error extracting {file_path}: {str(e)}")
         raise ExtractionError(f"Error extracting {file_path}: {str(e)}") from e
+
 
 def _search_arxiv_id(arxiv_id: str) -> Optional[arxiv.Result]:
     """
