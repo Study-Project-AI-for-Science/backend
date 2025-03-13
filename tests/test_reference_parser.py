@@ -8,6 +8,8 @@ for both BibTeX files and LaTeX files with \bibitem entries.
 
 import os
 import pytest
+import tempfile
+from unittest.mock import patch, mock_open
 from pathlib import Path
 
 from modules.latex_parser.reference_parser import ReferenceParser, extract_references
@@ -17,46 +19,108 @@ class TestReferenceParser:
     """Test suite for ReferenceParser class."""
 
     @pytest.fixture
-    def arxiv_root_dir(self):
-        """Fixture that provides the path to ArXiv papers directory."""
-        return Path("/Users/tpetersen/Dev/LLMsForScience/backend/modules/retriever/arxiv/Papers")
+    def bibtex_content(self):
+        """Fixture that provides sample BibTeX content for testing."""
+        return """
+@article{smith2020example,
+  author = {Smith, John and Doe, Jane},
+  title = {An Example Paper},
+  journal = {Journal of Examples},
+  year = {2020},
+  volume = {42},
+  number = {1},
+  pages = {100--110},
+  doi = {10.1234/example.5678}
+}
+@book{jones2019book,
+  author = {Jones, Robert},
+  title = {A Sample Book},
+  publisher = {Academic Press},
+  year = {2019},
+  address = {New York, NY},
+  isbn = {123-456-789}
+}
+@misc{brown2021tech,
+  author = {Brown, Maria},
+  title = {Technical Report on Examples},
+  year = {2021},
+  note = {Technical Report},
+  institution = {Example University}
+}
+"""
 
     @pytest.fixture
-    def bibtex_paper_dir(self, arxiv_root_dir):
-        """Fixture that provides the path to a paper with BibTeX file."""
-        return arxiv_root_dir / "2410.20268v2.Centaur__a_foundation_model_of_human_cognition"
+    def latex_content(self):
+        """Fixture that provides sample LaTeX bibliography content for testing."""
+        return r"""
+\begin{thebibliography}{99}
+\bibitem{vaswani2017attention}
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, and Illia Polosukhin.
+\newblock Attention is all you need.
+\newblock {\em Advances in Neural Information Processing Systems}, pages 5998--6008, 2017.
+
+\bibitem{devlin2019bert}
+Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova.
+\newblock BERT: Pre-training of deep bidirectional transformers for language understanding.
+\newblock {\em arXiv preprint arXiv:1810.04805}, 2018.
+
+\bibitem{kingma2014adam}
+Diederik Kingma and Jimmy Ba.
+\newblock Adam: A method for stochastic optimization.
+\newblock In {\em ICLR}, 2015.
+\end{thebibliography}
+"""
 
     @pytest.fixture
-    def bibtex_file_path(self, bibtex_paper_dir):
-        """Fixture that provides the path to a BibTeX file."""
-        return bibtex_paper_dir / "sn-bibliography.bib"
+    def temp_bibtex_file(self, bibtex_content):
+        """Create a temporary BibTeX file for testing."""
+        with tempfile.NamedTemporaryFile(suffix='.bib', delete=False, mode='w+') as f:
+            f.write(bibtex_content)
+            temp_path = f.name
+        
+        yield temp_path
+        
+        # Cleanup
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
 
     @pytest.fixture
-    def latex_paper_dir(self, arxiv_root_dir):
-        """Fixture that provides the path to a paper with LaTeX bibliography."""
-        return arxiv_root_dir / "1706.03762v7.Attention_Is_All_You_Need"
+    def temp_latex_file(self, latex_content):
+        """Create a temporary LaTeX file for testing."""
+        with tempfile.NamedTemporaryFile(suffix='.tex', delete=False, mode='w+') as f:
+            f.write(latex_content)
+            temp_path = f.name
+        
+        yield temp_path
+        
+        # Cleanup
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
 
     @pytest.fixture
-    def latex_file_path(self, latex_paper_dir):
-        """Fixture that provides the path to a LaTeX file with \bibitem entries."""
-        return latex_paper_dir / "ms.tex"
+    def temp_paper_dir(self, bibtex_content, latex_content):
+        """Create a temporary directory with paper files for testing extract_references."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create a BibTeX file
+            bib_path = os.path.join(temp_dir, "references.bib")
+            with open(bib_path, 'w') as f:
+                f.write(bibtex_content)
+            
+            # Create a LaTeX file
+            tex_path = os.path.join(temp_dir, "paper.tex")
+            with open(tex_path, 'w') as f:
+                f.write(latex_content)
+            
+            yield temp_dir
 
     @pytest.fixture
     def reference_parser(self):
         """Fixture that provides a ReferenceParser instance."""
         return ReferenceParser()
 
-    def test_bibtex_file_exists(self, bibtex_file_path):
-        """Test that the BibTeX file exists in expected location."""
-        assert bibtex_file_path.exists(), f"BibTeX test file not found at {bibtex_file_path}"
-
-    def test_latex_file_exists(self, latex_file_path):
-        """Test that the LaTeX file exists in expected location."""
-        assert latex_file_path.exists(), f"LaTeX test file not found at {latex_file_path}"
-
-    def test_parse_bibtex_file(self, reference_parser, bibtex_file_path):
+    def test_parse_bibtex_file(self, reference_parser, temp_bibtex_file):
         """Test parsing a BibTeX file."""
-        entries = reference_parser.parse_bibtex_file(str(bibtex_file_path))
+        entries = reference_parser.parse_bibtex_file(temp_bibtex_file)
 
         # Check that entries were found
         assert len(entries) > 0, "No entries found in BibTeX file"
@@ -74,9 +138,9 @@ class TestReferenceParser:
             # At least one of these fields should be present
             assert any([author, title, year]), "Entry is missing essential fields"
 
-    def test_parse_latex_bibliography(self, reference_parser, latex_file_path):
+    def test_parse_latex_bibliography(self, reference_parser, temp_latex_file):
         """Test parsing a LaTeX file with \bibitem entries."""
-        entries = reference_parser.parse_latex_bibliography(str(latex_file_path))
+        entries = reference_parser.parse_latex_bibliography(temp_latex_file)
 
         # Check that entries were found
         assert len(entries) > 0, "No entries found in LaTeX file"
@@ -96,9 +160,9 @@ class TestReferenceParser:
             # Raw text should always be present
             assert entry.get_field("raw_text"), "Raw text is missing"
 
-    def test_extract_references_bibtex(self, bibtex_paper_dir):
+    def test_extract_references_bibtex(self, temp_paper_dir):
         """Test extract_references with a directory containing a BibTeX file."""
-        references = extract_references(str(bibtex_paper_dir))
+        references = extract_references(temp_paper_dir)
 
         # Check that references were found
         assert len(references) > 0, "No references found in paper directory"
@@ -111,24 +175,9 @@ class TestReferenceParser:
             # Most should have these fields
             assert any(["author" in ref, "title" in ref]), "Reference is missing essential fields"
 
-    def test_extract_references_latex(self, latex_paper_dir):
-        """Test extract_references with a directory containing a LaTeX file with bibliography."""
-        references = extract_references(str(latex_paper_dir))
-
-        # Check that references were found
-        assert len(references) > 0, "No references found in paper directory"
-
-        # Check structure of returned references
-        for ref in references:
-            assert "id" in ref, "Reference ID is missing"
-            assert "type" in ref, "Reference type is missing"
-
-            # Most should have these fields
-            assert any(["author" in ref, "title" in ref]), "Reference is missing essential fields"
-
-    def test_reference_entry_to_dict(self, reference_parser, bibtex_file_path):
+    def test_reference_entry_to_dict(self, reference_parser, temp_bibtex_file):
         """Test converting a ReferenceEntry to a dictionary."""
-        entries = reference_parser.parse_bibtex_file(str(bibtex_file_path))
+        entries = reference_parser.parse_bibtex_file(temp_bibtex_file)
         assert len(entries) > 0, "No entries found for testing to_dict"
 
         # Convert the first entry to dict
@@ -158,25 +207,20 @@ class TestReferenceParser:
             cleaned = reference_parser._clean_bibtex_value(input_value)
             assert cleaned == expected_output, f"Clean failed for: {input_value}"
 
-    @pytest.mark.skipif(
-        not os.path.exists("/Users/tpetersen/Dev/LLMsForScience/backend/modules/retriever/arxiv/Papers"),
-        reason="ArXiv paper directory not available",
-    )
-    def test_integration_both_formats(self, bibtex_paper_dir, latex_paper_dir):
+    def test_integration_both_formats(self, temp_paper_dir):
         """Integration test using both formats."""
-        bibtex_refs = extract_references(str(bibtex_paper_dir))
-        latex_refs = extract_references(str(latex_paper_dir))
+        references = extract_references(temp_paper_dir)
+        
+        assert len(references) > 0, "No references extracted from paper directory"
 
-        assert len(bibtex_refs) > 0, "No references extracted from BibTeX paper"
-        assert len(latex_refs) > 0, "No references extracted from LaTeX paper"
-
-        # Check for possible common reference (e.g., 'vaswani2017attention' might be in both papers)
-        bibtex_ids = {ref["id"].lower() for ref in bibtex_refs}
-        latex_ids = {ref["id"].lower() for ref in latex_refs}
-
-        # This is just informational and might not always pass depending on the papers
-        common_ids = bibtex_ids.intersection(latex_ids)
-        print(f"Common reference IDs between papers: {common_ids}")
+        # Check for specific references we expect to find
+        reference_ids = {ref["id"].lower() for ref in references}
+        expected_ids = {"smith2020example", "jones2019book", "brown2021tech", 
+                      "vaswani2017attention", "devlin2019bert", "kingma2014adam"}
+        
+        # Check if at least some of our expected IDs are found
+        assert any(ref_id in reference_ids for ref_id in expected_ids), \
+            f"None of the expected reference IDs were found. Found: {reference_ids}"
 
 
 if __name__ == "__main__":
