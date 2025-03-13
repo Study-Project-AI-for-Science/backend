@@ -25,7 +25,6 @@ COPY modules/ modules/
 COPY scripts/ scripts/
 COPY run.py .
 COPY README.md .
-COPY .env .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir .
