@@ -537,6 +537,7 @@ def paper_list_all(page: int = 1, page_size: int = 10) -> dict:
 
 # References
 
+
 def paper_references_insert_many(paper_id: str, references: list):
     """
     Inserts multiple reference entries for a paper into the database.
@@ -578,7 +579,7 @@ def paper_references_insert_many(paper_id: str, references: list):
             }
         ]
         inserted_count = paper_references_insert_many("1234abcd", references)
-    """
+    """  # noqa: E501
     if not references:
         logger.warning(f"No references provided for paper ID {paper_id}")
         return 0
@@ -628,13 +629,15 @@ def paper_references_insert_many(paper_id: str, references: list):
                     if "id" in ref:
                         fields["citation_key"] = ref["id"]
 
-                    values.append((
-                        ref_id,
-                        ref["title"],
-                        ref["author"],  # Use "author" field instead of "authors"
-                        psycopg.types.json.Json(fields),  # Convert to JSON
-                        paper_id
-                    ))
+                    values.append(
+                        (
+                            ref_id,
+                            ref["title"],
+                            ref["author"],  # Use "author" field instead of "authors"
+                            psycopg.types.json.Json(fields),  # Convert to JSON
+                            paper_id,
+                        )
+                    )
 
                 # Execute batch insert
                 cur.executemany(insert_query, values)
