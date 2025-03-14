@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from modules.Retriever.arxiv.arxiv_retriever import (
+from modules.retriever.arxiv.arxiv_retriever import (
     paper_get_metadata,
     paper_download_arxiv_id,
     paper_download_arxiv_metadata,
@@ -19,13 +19,13 @@ TEST_PDF_PATH = "/tmp/test.pdf"
 
 @pytest.fixture
 def mock_arxiv_client():
-    with patch("modules.Retriever.arxiv.arxiv_retriever.client") as mock:
+    with patch("modules.retriever.arxiv.arxiv_retriever.client") as mock:
         yield mock
 
 
 @pytest.fixture
 def mock_arxiv():
-    with patch("modules.Retriever.arxiv.arxiv_retriever.arxiv") as mock:
+    with patch("modules.retriever.arxiv.arxiv_retriever.arxiv") as mock:
         # Set up mock paper result
         mock_paper = MagicMock()
         mock_paper.title = TEST_TITLE
@@ -60,7 +60,7 @@ def mock_arxiv():
 
 @pytest.fixture
 def mock_pymupdf():
-    with patch("modules.Retriever.arxiv.arxiv_retriever.pymupdf") as mock:
+    with patch("modules.retriever.arxiv.arxiv_retriever.pymupdf") as mock:
         # Create a mock document with proper page count
         mock_doc = MagicMock()
         mock_doc.page_count = 1
