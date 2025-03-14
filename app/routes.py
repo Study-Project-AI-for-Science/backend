@@ -117,8 +117,6 @@ def create_paper():
             # Insert references into database
             if references:
                 try:
-                    # Todo: Insert references into the database @tomhaerter
-                    # Currently references are still of type list[dict]
                     db.paper_references_insert_many(paper_id, references)
                     logger.info(f"Stored {len(references)} references for paper {paper_id}")
                 except DatabaseError as e:

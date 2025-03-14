@@ -274,7 +274,7 @@ def paper_insert(
                 paper_id = uuid7()
 
                 paper_insert_query = """
-                    INSERT INTO papers (id, title, authors, file_url, file_hash, 
+                    INSERT INTO papers (id, title, authors, file_url, file_hash,
                                         abstract, online_url, published_date, updated_date)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);
                 """
@@ -335,11 +335,11 @@ def paper_get_similar_to_query(query_embedding: list, limit: int = 10, similarit
             with conn.cursor() as cur:
                 if similarity_dropout > 0:
                     query = """
-                        SELECT p.*, 
-                               pe.embedding, 
-                               pe.model_name, 
-                               pe.model_version, 
-                               pe.created_at, 
+                        SELECT p.*,
+                               pe.embedding,
+                               pe.model_name,
+                               pe.model_version,
+                               pe.created_at,
                                (pe.embedding <=> %s::vector) AS similarity
                         FROM paper_embeddings pe
                         JOIN papers p ON p.id = pe.paper_id
@@ -350,11 +350,11 @@ def paper_get_similar_to_query(query_embedding: list, limit: int = 10, similarit
                     cur.execute(query, (query_embedding, query_embedding, similarity_dropout, query_embedding, limit))
                 else:
                     query = """
-                        SELECT p.*, 
-                               pe.embedding, 
-                               pe.model_name, 
-                               pe.model_version, 
-                               pe.created_at, 
+                        SELECT p.*,
+                               pe.embedding,
+                               pe.model_name,
+                               pe.model_version,
+                               pe.created_at,
                                (pe.embedding <=> %s::vector) AS similarity
                         FROM paper_embeddings pe
                         JOIN papers p ON p.id = pe.paper_id
@@ -537,10 +537,123 @@ def paper_list_all(page: int = 1, page_size: int = 10) -> dict:
 
 # References
 
-
 def paper_references_insert_many(paper_id: str, references: list):
-    # TODO: Implement
-    raise NotImplementedError
+    """
+    Inserts multiple reference entries for a paper into the database.
+
+    Description:
+        Takes a list of references and associates them with the specified paper by
+        inserting records into the "paper_references" table.
+
+    Parameters:
+        paper_id (str): The unique identifier of the paper that contains the references.
+        references (list): A list of dictionaries, each containing reference metadata in BibTeX format:
+                           - id (str): The citation key of the reference
+                           - type (str): The type of reference (e.g., 'article', 'inproceedings')
+                           - title (str): The title of the referenced paper
+                           - author (str): The authors of the referenced paper
+                           - raw_bibtex (str): The raw BibTeX entry
+                           - Additional fields (e.g., booktitle, journal, year, etc.)
+
+    Returns:
+        int: The number of references successfully inserted.
+
+    Raises:
+        PaperNotFoundError: If the paper with the given ID does not exist.
+        DatabaseError: If there is an error executing the database operations.
+        ValueError: If the references list is empty or not properly formatted.
+
+    Example:
+        references = [
+            {
+                "id": "turbo",
+                "type": "inproceedings",
+                "title": "Adversarial diffusion distillation",
+                "author": "Sauer, Axel and Lorenz, Dominik and Blattmann, Andreas and Rombach, Robin",
+                "booktitle": "European Conference on Computer Vision",
+                "pages": "87--103",
+                "year": "2024",
+                "organization": "Springer",
+                "raw_bibtex": "@inproceedings{turbo, title={Adversarial diffusion distillation},\n  author={Sauer, Axel and Lorenz, Dominik and Blattmann, Andreas and Rombach, Robin},\n  booktitle={European Conference on Computer Vision},\n  pages={87--103},\n  year={2024},\n  organization={Springer}\n}}"
+            }
+        ]
+        inserted_count = paper_references_insert_many("1234abcd", references)
+    """
+    if not references:
+        logger.warning(f"No references provided for paper ID {paper_id}")
+        return 0
+
+    # Validate the structure of references
+    for i, ref in enumerate(references):
+        # Check if ref is a dictionary
+        if not isinstance(ref, dict):
+            error_msg = f"Reference at index {i} is not a dictionary"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        # Check for required fields
+        if "title" not in ref:
+            ref["title"] = "Unknown Title"
+            logger.warning(f"Reference at index {i} is missing title, using default")
+
+        if "author" not in ref:
+            ref["author"] = "Unknown Authors"
+            logger.warning(f"Reference at index {i} is missing author, using default")
+
+    try:
+        # Check if the paper exists
+        with psycopg.connect(POSTGRES_URL, row_factory=dict_row) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM papers WHERE id = %s", (paper_id,))
+                if cur.fetchone() is None:
+                    raise PaperNotFoundError(f"Paper with ID {paper_id} not found.")
+
+                # Prepare batch insert
+                insert_query = """
+                    INSERT INTO paper_references (id, title, authors, fields, paper_id)
+                    VALUES (%s, %s, %s, %s, %s)
+                """
+
+                # Prepare values for batch insertion
+                values = []
+                for ref in references:
+                    # Generate a new UUID for each reference instead of using citation key
+                    # This fixes the "invalid input syntax for type uuid" error
+                    ref_id = uuid7()
+
+                    # Copy all fields except certain ones to the fields dictionary
+                    fields = {k: v for k, v in ref.items() if k not in ["id", "title", "author"]}
+
+                    # Store the original citation key in the fields if it exists
+                    if "id" in ref:
+                        fields["citation_key"] = ref["id"]
+
+                    values.append((
+                        ref_id,
+                        ref["title"],
+                        ref["author"],  # Use "author" field instead of "authors"
+                        psycopg.types.json.Json(fields),  # Convert to JSON
+                        paper_id
+                    ))
+
+                # Execute batch insert
+                cur.executemany(insert_query, values)
+                inserted_count = cur.rowcount
+
+            conn.commit()
+
+        logger.info(f"Successfully inserted {inserted_count} references for paper ID {paper_id}")
+        return inserted_count
+
+    except PaperNotFoundError as e:
+        logger.error(f"Error inserting references for paper {paper_id}: {e}")
+        raise
+    except psycopg.Error as e:
+        logger.error(f"Database error while inserting references for paper {paper_id}: {e}")
+        raise DatabaseError(f"Database error while inserting references: {str(e)}") from e
+    except Exception as e:
+        logger.error(f"Unexpected error while inserting references for paper {paper_id}: {e}")
+        raise DatabaseError(f"Failed to insert references: {str(e)}") from e
 
 
 def paper_references_list(paper_id: str) -> list:
