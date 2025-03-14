@@ -21,9 +21,7 @@ class Config:
         os.makedirs("logs", exist_ok=True)
 
         # Set up file handler
-        file_handler = RotatingFileHandler(
-            Config.LOG_FILE, maxBytes=Config.LOG_MAX_BYTES, backupCount=Config.LOG_BACKUP_COUNT
-        )
+        file_handler = RotatingFileHandler(Config.LOG_FILE, maxBytes=Config.LOG_MAX_BYTES, backupCount=Config.LOG_BACKUP_COUNT)
         file_handler.setFormatter(logging.Formatter(Config.LOG_FORMAT))
         file_handler.setLevel(Config.LOG_LEVEL)
 

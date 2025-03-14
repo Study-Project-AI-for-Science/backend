@@ -1,7 +1,9 @@
+import logging
 from flask import Blueprint, request, jsonify
 from flask_cors import CORS
 import os
 import tempfile
+import shutil
 from modules.database import database as db
 from modules.database.database import (
     PaperNotFoundError,
@@ -11,11 +13,17 @@ from modules.database.database import (
     InvalidUpdateError,
     DuplicatePaperError,
 )
+from modules.latex_parser import reference_parser
 from modules.storage.storage import S3UploadError
 from modules.ollama import ollama_client
+from modules.retriever.arxiv import arxiv_retriever
 
+# Configure logger
+logger = logging.getLogger(__name__)
+# Create the main blueprint
 bp = Blueprint("main", __name__)
-CORS(bp)  # Enable CORS for all routes in this blueprint
+# Enable CORS for all routes in this blueprint
+CORS(bp)
 
 
 @bp.route("/")
@@ -42,10 +50,80 @@ def create_paper():
         # Save the uploaded file temporarily
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
             file.save(temp_file.name)
+            # Try to get metadata from arxiv
+            paper_metadata = arxiv_retriever.paper_get_metadata(temp_file.name)
+            arxiv_paper_id = paper_metadata.get("arxiv_id", None)
+            title: str = paper_metadata.get("title", title)
+            authors: str = paper_metadata.get("authors", authors)
+            abstract: str = paper_metadata.get("abstract", "")
+            paper_url: str = paper_metadata.get("url", "")
+            published: str = paper_metadata.get("published_date", "")
+            updated: str = paper_metadata.get("updated_date", "")
+
             # Insert the paper into the database
-            paper_id = db.paper_insert(temp_file.name, title, authors)
+            paper_id = db.paper_insert(temp_file.name, title, authors, abstract, paper_url, published, updated)
             # Clean up the temporary file
             os.unlink(temp_file.name)
+
+            references = []
+            # Extract references, for now only from arxiv papers
+            if arxiv_paper_id:
+                try:
+                    logger.info(f"Starting reference extraction for ArXiv paper {arxiv_paper_id}")
+                    # Create a temporary directory for the paper source
+                    temp_dir = tempfile.mkdtemp()
+                    try:
+                        # Download the paper source to the temporary directory
+                        logger.debug(f"Downloading source files for ArXiv paper {arxiv_paper_id}")
+                        arxiv_retriever.paper_download_arxiv_id(arxiv_paper_id, temp_dir)
+
+                        # Extract the folder name which matches the arxiv ID
+                        source_dir = os.path.join(temp_dir, arxiv_paper_id.replace(".", ""))
+                        if not os.path.exists(source_dir):
+                            # If the specific folder doesn't exist, use the base temp dir
+                            logger.debug(f"Source directory {source_dir} not found, using base temp directory")
+                            source_dir = temp_dir
+
+                        # Extract references from the downloaded source
+                        logger.debug(f"Extracting references from source directory: {source_dir}")
+                        references = reference_parser.extract_references(source_dir)
+                        logger.info(f"Successfully extracted {len(references)} references from paper {arxiv_paper_id}")
+                    except arxiv_retriever.ArxivRetrievalError as e:
+                        logger.error(f"ArXiv retrieval error for paper {arxiv_paper_id}: {str(e)}")
+                        # Continue without references
+                    except arxiv_retriever.ArxivDownloadError as e:
+                        logger.error(f"ArXiv download error for paper {arxiv_paper_id}: {str(e)}")
+                        # Continue without references
+                    except arxiv_retriever.ExtractionError as e:
+                        logger.error(f"Source extraction error for paper {arxiv_paper_id}: {str(e)}")
+                        # Continue without references
+                    except Exception as e:
+                        logger.error(f"Unexpected error extracting references for paper {arxiv_paper_id}: {str(e)}")
+                        # Continue without references
+                    finally:
+                        # Clean up: remove the temporary directory and its contents
+                        try:
+                            shutil.rmtree(temp_dir, ignore_errors=True)
+                            logger.info(f"Cleaned up temporary directory for {arxiv_paper_id}")
+                        except Exception as e:
+                            logger.warning(f"Failed to clean up temporary directory for {arxiv_paper_id}: {str(e)}")
+                except Exception as e:
+                    logger.error(f"Error in reference extraction process for paper {arxiv_paper_id}: {str(e)}")
+                    # Continue the process even if reference extraction fails
+            else:
+                # TODO Extract references from the PDF itself
+                logger.debug("No ArXiv ID found for paper, skipping reference extraction")
+
+            # Insert references into database
+            if references:
+                try:
+                    # Todo: Insert references into the database @tomhaerter
+                    # Currently references are still of type list[dict]
+                    db.paper_references_insert_many(paper_id, references)
+                    logger.info(f"Stored {len(references)} references for paper {paper_id}")
+                except DatabaseError as e:
+                    logger.error(f"Failed to store references for paper {paper_id}: {str(e)}")
+                    # We don't want to fail the entire paper upload if reference storage fails
 
         return jsonify({"paper_id": paper_id}), 201
     except DuplicatePaperError as e:
@@ -54,6 +132,15 @@ def create_paper():
         return jsonify({"error": str(e)}), 400
     except S3UploadError as e:
         return jsonify({"error": str(e)}), 503
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bp.route("/papers/<string:paper_id>/references", methods=["GET"])
+def get_paper_references(paper_id):
+    try:
+        references = db.paper_references_list(paper_id)
+        return jsonify(references)
     except DatabaseError as e:
         return jsonify({"error": str(e)}), 500
 
@@ -81,6 +168,11 @@ def list_papers():
                     "paper_id": paper["id"],
                     "title": paper["title"],
                     "authors": paper["authors"],
+                    "abstract": paper.get("abstract", ""),
+                    "online_url": paper.get("online_url", ""),
+                    "published_date": paper.get("published_date", ""),
+                    "updated_date": paper.get("updated_date", ""),
+                    "created_at": paper.get("created_at", ""),
                     "similarity": paper["similarity"],
                 }
                 for paper in papers
@@ -101,9 +193,10 @@ def list_papers():
 def get_paper(paper_id):
     try:
         paper = db.paper_find(paper_id)
-        # Remove the embedding from the response to reduce payload size
+
         if "embedding" in paper:
             del paper["embedding"]
+
         return jsonify(paper)
     except PaperNotFoundError as e:
         return jsonify({"error": str(e)}), 404
