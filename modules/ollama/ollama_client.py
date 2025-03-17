@@ -36,6 +36,8 @@ class OllamaInitializationError(Exception):
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistralai/Mistral-7B-Instruct-v0.1")
 OLLAMA_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "mxbai-embed-large")
+OLLAMA_USERNAME = os.getenv("OLLAMA_USERNAME", "")
+OLLAMA_PASSWORD = os.getenv("OLLAMA_PASSWORD", "")
 OLLAMA_API_TIMEOUT = int(os.getenv("OLLAMA_API_TIMEOUT", "60"))
 OLLAMA_MAX_RETRIES = int(os.getenv("OLLAMA_MAX_RETRIES", "3"))
 OLLAMA_RETRY_DELAY = int(os.getenv("OLLAMA_RETRY_DELAY", "2"))
@@ -53,7 +55,10 @@ def _initialize_module():
         TOKENIZER = AutoTokenizer.from_pretrained("mixedbread-ai/mxbai-embed-large-v1")
 
         # Initialize Ollama client and pull model
-        OLLAMA_CLIENT = ollama.Client(host=OLLAMA_HOST)
+        if OLLAMA_USERNAME and OLLAMA_PASSWORD:
+            OLLAMA_CLIENT = ollama.Client(host=OLLAMA_HOST, auth=(OLLAMA_USERNAME, OLLAMA_PASSWORD))
+        else:
+            OLLAMA_CLIENT = ollama.Client(host=OLLAMA_HOST)
         OLLAMA_CLIENT.pull(OLLAMA_EMBEDDING_MODEL)
         logger.info(f"Successfully pulled Ollama model: {OLLAMA_EMBEDDING_MODEL}")
     except Exception as e:
