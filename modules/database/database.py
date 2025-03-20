@@ -201,6 +201,7 @@ def paper_insert(
     paper_url: str = None,
     published: str = None,
     updated: str = None,
+    markdown_content: str = None,
 ):
     """
     Inserts a new paper and its embedding(s) into the database.
@@ -218,12 +219,16 @@ def paper_insert(
         paper_url (str, optional): The URL where the paper is available online.
         published (str, optional): The publication date of the paper.
         updated (str, optional): The last update date of the paper.
+        markdown_content (str, optional): The full text content of the paper in markdown format.
 
     Returns:
         The paper_id (str) of the newly inserted paper.
 
     Raises:
-        Exception: If any step fails (hash computation, S3 upload, embedding generation, or database insertion).
+        DuplicatePaperError: If a paper with the same hash already exists.
+        FileHashError: If computing the file hash fails.
+        S3UploadError: If uploading the file to S3 fails.
+        DatabaseError: If a database error occurs during insertion.
 
     Example:
         paper_id = paper_insert("/path/to/file.pdf", "Title", "Author A, Author B")
@@ -268,6 +273,12 @@ def paper_insert(
             # Fallback to a dummy embedding if the generation fails
             embeddings = [[0.0] * 1024]
 
+        # Handle empty date strings by converting them to None
+        if published == "":
+            published = None
+        if updated == "":
+            updated = None
+
         with psycopg.connect(POSTGRES_URL, row_factory=dict_row) as conn:
             with conn.cursor() as cur:
                 # Generate a new UUID7 for the paper
@@ -275,12 +286,12 @@ def paper_insert(
 
                 paper_insert_query = """
                     INSERT INTO papers (id, title, authors, file_url, file_hash,
-                                        abstract, online_url, published_date, updated_date)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);
+                                        abstract, online_url, published_date, updated_date, content)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
                 """
                 cur.execute(
                     paper_insert_query,
-                    (paper_id, title, authors, file_url, file_hash, abstract, paper_url, published, updated),
+                    (paper_id, title, authors, file_url, file_hash, abstract, paper_url, published, updated, markdown_content),
                 )
 
                 # Insert one record per embedding
@@ -435,11 +446,12 @@ def paper_update(paper_id: str, **kwargs):
 
 def paper_delete(paper_id: str):
     """
-    Deletes a paper along with its embedding and S3 file.
+    Deletes a paper along with its embedding, references, and S3 file.
 
     Description:
         Removes the paper record from the "papers" table, the associated embedding from
-        the "paper_embeddings" table, and deletes the corresponding file from S3.
+        the "paper_embeddings" table, the associated references from the "paper_references" table,
+        and deletes the corresponding file from S3.
 
     Parameters:
         paper_id (str): The unique identifier of the paper to delete.
@@ -465,6 +477,8 @@ def paper_delete(paper_id: str):
 
                 # Delete the associated embeddings
                 cur.execute("DELETE FROM paper_embeddings WHERE paper_id = %s;", (paper_id,))
+                # Delete the associated references
+                cur.execute("DELETE FROM paper_references WHERE paper_id = %s;", (paper_id,))
                 # Delete the paper record
                 cur.execute("DELETE FROM papers WHERE id = %s;", (paper_id,))
             conn.commit()
@@ -705,3 +719,6 @@ def paper_references_list(paper_id: str) -> list:
     except psycopg.Error as e:
         logger.error(f"Database error while retrieving references for paper {paper_id}: {e}")
         raise DatabaseError(f"Database error while retrieving references: {str(e)}") from e
+    except Exception as e:
+        logger.error(f"Unexpected error while retrieving references for paper {paper_id}: {e}")
+        raise DatabaseError(f"Failed to retrieve references: {str(e)}") from e
