@@ -18,6 +18,12 @@ def mock_ollama():
 
 
 @pytest.fixture
+def mock_arxiv_retriever():
+    with patch("app.routes.arxiv_retriever") as mock_arxiv:
+        yield mock_arxiv
+
+
+@pytest.fixture
 def app():
     app = Flask(__name__)
     app.config["TESTING"] = True
@@ -37,4 +43,5 @@ def sample_paper():
         "title": "Test Paper",
         "authors": "Test Author",
         "similarity": 0.95,
+        "content": "# Test Paper\n\nThis is a test markdown content for the paper.",
     }
