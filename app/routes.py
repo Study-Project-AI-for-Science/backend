@@ -13,7 +13,7 @@ from modules.database.database import (
     InvalidUpdateError,
     DuplicatePaperError,
 )
-from modules.latex_parser import reference_parser
+from modules.latex_parser import reference_parser, latex_content_parser
 from modules.storage.storage import S3UploadError
 from modules.ollama import ollama_client
 from modules.retriever.arxiv import arxiv_retriever
@@ -28,11 +28,25 @@ CORS(bp)
 
 @bp.route("/")
 def home():
+    """Simple endpoint to verify the API is running."""
     return jsonify({"message": "API is running"})
 
 
 @bp.route("/papers", methods=["POST"])
 def create_paper():
+    """
+    Upload and process a new paper.
+
+    This endpoint handles:
+    1. PDF file upload validation
+    2. ArXiv metadata retrieval
+    3. LaTeX content extraction and conversion to Markdown (if ArXiv source available)
+    4. Reference extraction
+    5. Paper storage in database and S3
+
+    Returns:
+        JSON with paper_id on success, error message on failure
+    """
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
 
@@ -60,11 +74,7 @@ def create_paper():
             published: str = paper_metadata.get("published_date", "")
             updated: str = paper_metadata.get("updated_date", "")
 
-            # Insert the paper into the database
-            paper_id = db.paper_insert(temp_file.name, title, authors, abstract, paper_url, published, updated)
-            # Clean up the temporary file
-            os.unlink(temp_file.name)
-
+            markdown_content = None
             references = []
             # Extract references, for now only from arxiv papers
             if arxiv_paper_id:
@@ -83,6 +93,16 @@ def create_paper():
                             # If the specific folder doesn't exist, use the base temp dir
                             logger.debug(f"Source directory {source_dir} not found, using base temp directory")
                             source_dir = temp_dir
+
+                        # First create a markdown version of the paper
+                        try:
+                            logger.debug(f"Converting LaTeX to Markdown in directory: {source_dir}")
+                            markdown_content = latex_content_parser.parse_latex_to_markdown(source_dir)
+                            logger.info(f"Successfully created markdown version for paper {arxiv_paper_id}")
+                        except Exception as e:
+                            logger.warning(f"Failed to create markdown version: {str(e)}")
+                            # Continue with original LaTeX files
+                            markdown_content = None
 
                         # Extract references from the downloaded source
                         logger.debug(f"Extracting references from source directory: {source_dir}")
@@ -114,11 +134,14 @@ def create_paper():
                 # TODO Extract references from the PDF itself
                 logger.debug("No ArXiv ID found for paper, skipping reference extraction")
 
+            # Insert the paper into the database
+            paper_id = db.paper_insert(temp_file.name, title, authors, abstract, paper_url, published, updated, markdown_content)
+            # Clean up the temporary file
+            os.unlink(temp_file.name)
+
             # Insert references into database
             if references:
                 try:
-                    # Todo: Insert references into the database @tomhaerter
-                    # Currently references are still of type list[dict]
                     db.paper_references_insert_many(paper_id, references)
                     logger.info(f"Stored {len(references)} references for paper {paper_id}")
                 except DatabaseError as e:
@@ -138,15 +161,29 @@ def create_paper():
 
 @bp.route("/papers/<string:paper_id>/references", methods=["GET"])
 def get_paper_references(paper_id):
+    """Get all references for a specific paper."""
     try:
         references = db.paper_references_list(paper_id)
         return jsonify(references)
+    except PaperNotFoundError as e:
+        return jsonify({"error": str(e)}), 404
     except DatabaseError as e:
         return jsonify({"error": str(e)}), 500
 
 
 @bp.route("/papers", methods=["GET"])
 def list_papers():
+    """
+    List papers with optional similarity search.
+
+    Query parameters:
+        query (str): Optional search query to find similar papers
+        page (int): Page number for pagination (default: 1)
+        page_size (int): Number of papers per page (default: 10)
+
+    Returns:
+        JSON with papers list and pagination metadata
+    """
     query = request.args.get("query")
     # Validate and normalize page and page_size
     try:
@@ -191,6 +228,7 @@ def list_papers():
 
 @bp.route("/papers/<string:paper_id>", methods=["GET"])
 def get_paper(paper_id):
+    """Get a specific paper by its ID."""
     try:
         paper = db.paper_find(paper_id)
 
@@ -206,6 +244,13 @@ def get_paper(paper_id):
 
 @bp.route("/papers/<string:paper_id>", methods=["PUT"])
 def update_paper(paper_id):
+    """
+    Update a paper's metadata.
+
+    Currently supports updating:
+    - title
+    - authors
+    """
     try:
         update_data = {}
         if "title" in request.json:
@@ -228,6 +273,12 @@ def update_paper(paper_id):
 
 @bp.route("/papers/<string:paper_id>", methods=["DELETE"])
 def delete_paper(paper_id):
+    """
+    Delete a paper and all its related resources:
+    - Embeddings
+    - References
+    - S3 file storage
+    """
     try:
         db.paper_delete(paper_id)
         return "", 204
@@ -242,4 +293,5 @@ def delete_paper(paper_id):
 
 @bp.errorhandler(404)
 def not_found(error):
+    """Handle 404 errors at the blueprint level."""
     return jsonify({"error": "Resource not found"}), 404

@@ -14,6 +14,10 @@ import faker
 import pymupdf
 import ollama
 from transformers import AutoTokenizer
+from dotenv import load_dotenv
+
+# Force reload of environment variables
+load_dotenv(override=True)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -33,9 +37,12 @@ class OllamaInitializationError(Exception):
 
 
 # --- Configuration ---
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")  # Default to localhost if not specified
+logger.info(f"OLLAMA_HOST is set to: {OLLAMA_HOST}")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistralai/Mistral-7B-Instruct-v0.1")
 OLLAMA_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "mxbai-embed-large")
+OLLAMA_USERNAME = os.getenv("OLLAMA_USERNAME", "")
+OLLAMA_PASSWORD = os.getenv("OLLAMA_PASSWORD", "")
 OLLAMA_API_TIMEOUT = int(os.getenv("OLLAMA_API_TIMEOUT", "60"))
 OLLAMA_MAX_RETRIES = int(os.getenv("OLLAMA_MAX_RETRIES", "3"))
 OLLAMA_RETRY_DELAY = int(os.getenv("OLLAMA_RETRY_DELAY", "2"))
@@ -53,7 +60,14 @@ def _initialize_module():
         TOKENIZER = AutoTokenizer.from_pretrained("mixedbread-ai/mxbai-embed-large-v1")
 
         # Initialize Ollama client and pull model
-        OLLAMA_CLIENT = ollama.Client(host=OLLAMA_HOST)
+        logger.info(f"Initializing Ollama client with host: {OLLAMA_HOST}")
+        if OLLAMA_USERNAME and OLLAMA_PASSWORD:
+            OLLAMA_CLIENT = ollama.Client(host=OLLAMA_HOST, auth=(OLLAMA_USERNAME, OLLAMA_PASSWORD))
+            logger.info("Connected to Ollama with authentication")
+        else:
+            OLLAMA_CLIENT = ollama.Client(host=OLLAMA_HOST)
+            logger.info("Connected to Ollama without authentication")
+
         OLLAMA_CLIENT.pull(OLLAMA_EMBEDDING_MODEL)
         logger.info(f"Successfully pulled Ollama model: {OLLAMA_EMBEDDING_MODEL}")
     except Exception as e:
@@ -153,8 +167,8 @@ def _split_text_into_segments(text: str, max_tokens: int = 512) -> List[str]:
 
             # Split long paragraph into smaller chunks
             words = para.split()
-            current_chunk = []
             # TODO: maybe sentence tokenizer
+            current_chunk = []
             for word in words:
                 word_tokens = TOKENIZER.encode(word + " ", add_special_tokens=False)
                 if len(current_tokens) + len(word_tokens) <= max_tokens:
