@@ -34,4 +34,4 @@ RUN pip install --no-cache-dir .
 EXPOSE 5000
 
 # Command to run the application
-CMD ["sh", "-c", "python scripts/run_migrations.py && python scripts/create_bucket.py && gunicorn -w ${GUNICORN_WORKERS} -b 0.0.0.0:5000 'app:create_app()'"]
+CMD ["sh", "-c", "python scripts/run_migrations.py && python scripts/create_bucket.py && gunicorn -w ${GUNICORN_WORKERS} --timeout 120 -b 0.0.0.0:5000 'app:create_app()'"]
