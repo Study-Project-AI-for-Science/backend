@@ -16,6 +16,10 @@ from uuid_extensions import uuid7str as uuid7
 from modules.ollama import ollama_client
 from modules.storage import storage
 
+import tempfile
+import shutil
+import os
+
 load_dotenv()
 
 # Configure logging for debugging and error tracking.
@@ -558,7 +562,9 @@ def paper_references_insert_many(paper_id: str, references: list):
 
     Description:
         Takes a list of references and associates them with the specified paper by
-        inserting records into the "paper_references" table.
+        inserting records into the "paper_references" table. When a reference contains
+        an ArXiv ID, the referenced paper is downloaded, processed, and stored in the
+        database, with its paper_id added to the reference metadata.
 
     Parameters:
         paper_id (str): The unique identifier of the paper that contains the references.
@@ -614,8 +620,26 @@ def paper_references_insert_many(paper_id: str, references: list):
         if "author" not in ref:
             ref["author"] = "Unknown Authors"
             logger.warning(f"Reference at index {i} is missing author, using default")
-
+    
+    # Create a temporary directory for downloading referenced papers 
+    temp_dir = tempfile.mkdtemp()
+    logger.info(f"Created temporary directory for reference processing: {temp_dir}")
+    
     try:
+        # Process references that have ArXiv IDs
+        for ref in references:
+            try:
+                # Process reference with ArXiv ID and get paper_id if successful
+                ref_paper_id = _process_reference_with_arxiv_id(ref, temp_dir)
+                
+                # If a paper was successfully inserted, add its ID to the reference
+                if ref_paper_id:
+                    ref["paper_id"] = ref_paper_id
+                    logger.info(f"Added paper_id {ref_paper_id} to reference {ref.get('title', 'Unknown')}")
+            except Exception as e:
+                logger.error(f"Error processing reference with ArXiv ID: {str(e)}")
+                # Continue with other references even if this one failed
+        
         # Check if the paper exists
         with psycopg.connect(POSTGRES_URL, row_factory=dict_row) as conn:
             with conn.cursor() as cur:
@@ -623,15 +647,19 @@ def paper_references_insert_many(paper_id: str, references: list):
                 if cur.fetchone() is None:
                     raise PaperNotFoundError(f"Paper with ID {paper_id} not found.")
 
-                # Prepare batch insert
-                insert_query = """
-                    INSERT INTO paper_references (id, title, authors, fields, paper_id)
-                    VALUES (%s, %s, %s, %s, %s)
-                """
 
                 # Prepare values for batch insertion
                 values = []
                 for ref in references:
+                    
+                     # Prepare batch insert
+                    ref_paper_id = ref.get("paper_id", None)
+                    insert_query = """
+                        INSERT INTO paper_references (id, title, authors, fields, paper_id, reference_paper_id)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    """
+                    
+                    
                     # Generate a new UUID for each reference instead of using citation key
                     # This fixes the "invalid input syntax for type uuid" error
                     ref_id = uuid7()
@@ -650,8 +678,10 @@ def paper_references_insert_many(paper_id: str, references: list):
                             ref["author"],  # Use "author" field instead of "authors"
                             psycopg.types.json.Json(fields),  # Convert to JSON
                             paper_id,
+                            ref_paper_id
                         )
                     )
+                    
 
                 # Execute batch insert
                 cur.executemany(insert_query, values)
@@ -671,6 +701,14 @@ def paper_references_insert_many(paper_id: str, references: list):
     except Exception as e:
         logger.error(f"Unexpected error while inserting references for paper {paper_id}: {e}")
         raise DatabaseError(f"Failed to insert references: {str(e)}") from e
+    finally:
+        # Clean up temporary directory
+        try:
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir)
+                logger.info(f"Cleaned up temporary directory: {temp_dir}")
+        except Exception as e:
+            logger.warning(f"Failed to clean up temporary directory {temp_dir}: {str(e)}")
 
 
 def paper_references_list(paper_id: str) -> list:
@@ -722,3 +760,63 @@ def paper_references_list(paper_id: str) -> list:
     except Exception as e:
         logger.error(f"Unexpected error while retrieving references for paper {paper_id}: {e}")
         raise DatabaseError(f"Failed to retrieve references: {str(e)}") from e
+
+
+def _process_reference_with_arxiv_id(reference: dict, temp_dir: str) -> str:
+    """
+    Process a reference that contains an ArXiv ID by downloading and adding it to the system.
+
+    Description:
+        Extracts ArXiv IDs from the reference metadata, downloads the paper if an ID is found,
+        and inserts it into the database using the standard paper_insert process.
+
+    Parameters:
+        reference (dict): A dictionary containing reference metadata in BibTeX format.
+        temp_dir (str): A temporary directory where the referenced paper will be downloaded.
+
+    Returns:
+        str: The paper_id of the newly inserted paper if successful, None otherwise.
+
+    Example:
+        paper_id = _process_reference_with_arxiv_id(reference, "/tmp/ref_papers")
+    """
+    from modules.retriever.arxiv import arxiv_retriever
+
+    # Search through all keys and values in the reference dictionary for ArXiv IDs
+    arxiv_ids = []
+    for key, value in reference.items():
+        if isinstance(value, str):
+            arxiv_ids.extend(arxiv_retriever.extract_arxiv_ids(value))
+        if isinstance(key, str):
+            arxiv_ids.extend(arxiv_retriever.extract_arxiv_ids(key))
+
+    if not arxiv_ids:
+        return None
+
+    # Use the first found ArXiv ID
+    arxiv_id = arxiv_ids[0]
+    logger.info(f"Found ArXiv ID {arxiv_id} in reference {reference.get('title', 'Unknown')}")
+
+    try:
+        # Download the paper with the ArXiv ID
+        paper_path = arxiv_retriever.paper_download_arxiv_id(arxiv_id, temp_dir)
+        
+        # Get metadata from the downloaded paper
+        paper_metadata = arxiv_retriever.paper_get_metadata(paper_path)
+        
+        # Insert the paper into the database
+        paper_id = paper_insert(
+            file_path=paper_path,
+            title=paper_metadata.get("title", reference.get("title", "Unknown Title")),
+            authors=paper_metadata.get("authors", reference.get("author", "Unknown Authors")),
+            abstract=paper_metadata.get("abstract", ""),
+            paper_url=paper_metadata.get("url", ""),
+            published=paper_metadata.get("published_date", ""),
+            updated=paper_metadata.get("updated_date", "")
+        )
+        
+        logger.info(f"Successfully processed reference with ArXiv ID {arxiv_id}, inserted as paper {paper_id}")
+        return paper_id
+    except Exception as e:
+        logger.error(f"Error processing reference with ArXiv ID {arxiv_id}: {str(e)}")
+        return None
