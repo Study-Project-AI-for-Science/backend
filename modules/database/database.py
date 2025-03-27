@@ -18,7 +18,6 @@ from modules.storage import storage
 
 import tempfile
 import shutil
-import os
 
 load_dotenv()
 
@@ -620,18 +619,18 @@ def paper_references_insert_many(paper_id: str, references: list):
         if "author" not in ref:
             ref["author"] = "Unknown Authors"
             logger.warning(f"Reference at index {i} is missing author, using default")
-    
-    # Create a temporary directory for downloading referenced papers 
+
+    # Create a temporary directory for downloading referenced papers
     temp_dir = tempfile.mkdtemp()
     logger.info(f"Created temporary directory for reference processing: {temp_dir}")
-    
+
     try:
         # Process references that have ArXiv IDs
         for ref in references:
             try:
                 # Process reference with ArXiv ID and get paper_id if successful
                 ref_paper_id = _process_reference_with_arxiv_id(ref, temp_dir)
-                
+
                 # If a paper was successfully inserted, add its ID to the reference
                 if ref_paper_id:
                     ref["paper_id"] = ref_paper_id
@@ -639,7 +638,7 @@ def paper_references_insert_many(paper_id: str, references: list):
             except Exception as e:
                 logger.error(f"Error processing reference with ArXiv ID: {str(e)}")
                 # Continue with other references even if this one failed
-        
+
         # Check if the paper exists
         with psycopg.connect(POSTGRES_URL, row_factory=dict_row) as conn:
             with conn.cursor() as cur:
@@ -647,19 +646,16 @@ def paper_references_insert_many(paper_id: str, references: list):
                 if cur.fetchone() is None:
                     raise PaperNotFoundError(f"Paper with ID {paper_id} not found.")
 
-
                 # Prepare values for batch insertion
                 values = []
                 for ref in references:
-                    
-                     # Prepare batch insert
+                    # Prepare batch insert
                     ref_paper_id = ref.get("paper_id", None)
                     insert_query = """
                         INSERT INTO paper_references (id, title, authors, fields, paper_id, reference_paper_id)
                         VALUES (%s, %s, %s, %s, %s, %s)
                     """
-                    
-                    
+
                     # Generate a new UUID for each reference instead of using citation key
                     # This fixes the "invalid input syntax for type uuid" error
                     ref_id = uuid7()
@@ -678,10 +674,9 @@ def paper_references_insert_many(paper_id: str, references: list):
                             ref["author"],  # Use "author" field instead of "authors"
                             psycopg.types.json.Json(fields),  # Convert to JSON
                             paper_id,
-                            ref_paper_id
+                            ref_paper_id,
                         )
                     )
-                    
 
                 # Execute batch insert
                 cur.executemany(insert_query, values)
@@ -800,10 +795,10 @@ def _process_reference_with_arxiv_id(reference: dict, temp_dir: str) -> str:
     try:
         # Download the paper with the ArXiv ID
         paper_path = arxiv_retriever.paper_download_arxiv_id(arxiv_id, temp_dir)
-        
+
         # Get metadata from the downloaded paper
         paper_metadata = arxiv_retriever.paper_get_metadata(paper_path)
-        
+
         # Insert the paper into the database
         paper_id = paper_insert(
             file_path=paper_path,
@@ -812,9 +807,9 @@ def _process_reference_with_arxiv_id(reference: dict, temp_dir: str) -> str:
             abstract=paper_metadata.get("abstract", ""),
             paper_url=paper_metadata.get("url", ""),
             published=paper_metadata.get("published_date", ""),
-            updated=paper_metadata.get("updated_date", "")
+            updated=paper_metadata.get("updated_date", ""),
         )
-        
+
         logger.info(f"Successfully processed reference with ArXiv ID {arxiv_id}, inserted as paper {paper_id}")
         return paper_id
     except Exception as e:
