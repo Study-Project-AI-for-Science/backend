@@ -2,9 +2,10 @@ import pytest
 from unittest.mock import patch, MagicMock
 import sys
 import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from modules.ollama.ollama_client import get_paper_info  
+#sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from modules.ollama.ollama_client import get_paper_info
 
 
 @pytest.fixture
@@ -21,7 +22,7 @@ def mock_response_dict():
         "journal": "AI Journal",
         "publication_date": "2023-01-01",
         "doi": "10.1234/sample.doi",
-        "keywords": ["AI", "NLP"]
+        "keywords": ["AI", "NLP"],
     }
 
 
@@ -56,7 +57,6 @@ def test_get_paper_info_success(mock_instructor, mock_pdfreader, mock_exists, mo
 
 @patch("modules.ollama.ollama_client.os.path.exists")
 def test_get_paper_info_file_not_found(mock_exists):
-
     mock_exists.return_value = False
 
     with pytest.raises(FileNotFoundError):

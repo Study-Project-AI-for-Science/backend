@@ -16,12 +16,13 @@ from dotenv import load_dotenv
 import pdfreader
 from openai import OpenAI
 from modules.ollama.pydantic_classes import PaperMetadata
+from modules.ollama.pdf_extractor import extract_pdf_content
 import instructor
 
 # Force reload of environment variables
 load_dotenv(override=True)
 
-from module.pdf_extractor import extract_pdf_content
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -135,11 +136,10 @@ def get_paper_embeddings(pdf_path: str) -> Dict[str, List[List[float]]]:
         - model_version: Version of the model used
     """
     try:
-        text_content = extract_pdf_content(pdf_path) # extracts & splits content into chunks
+        text_content = extract_pdf_content(pdf_path)  # extracts & splits content into chunks
         if not text_content:
             logger.warning(f"No text extracted from PDF: {pdf_path}")
             return {"embeddings": [], "model_name": OLLAMA_EMBEDDING_MODEL, "model_version": "1.0"}
-
 
         # Get embeddings for each segment
         embeddings = []
@@ -192,10 +192,11 @@ def get_paper_info(file_path: str) -> dict:  #!TODO: Need to implement this func
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found: {file_path}")
 
-        reader = pdfreader(file_path)
-        first_page = reader.pages[0]
+        # Use PDFDocument from pdfreader module instead of calling pdfreader directly
+        doc = pdfreader.PDFDocument(file_path)
+        first_page = doc.pages[0]
         text = first_page.extract_text()
-            
+        
         # enables `response_model` in create call
         client = instructor.from_openai(
             OpenAI(
@@ -228,8 +229,7 @@ def get_paper_info(file_path: str) -> dict:  #!TODO: Need to implement this func
             ],
             response_model=PaperMetadata,
         )
-                
-        
+
         return resp.model_dump()
     except Exception as e:
         logger.error(f"Error generating paper info for {file_path}: {e}")

@@ -1,6 +1,3 @@
-import json
-import os
-from collections import defaultdict  
 from unstructured.partition.pdf import partition_pdf
 
 
@@ -10,7 +7,7 @@ def extract_pdf_content(pdf_path, max_context_length=512):
 
     Args:
         pdf_path (str): path to the PDF file
-        max_context_length(int): max context length of respective embedding model 
+        max_context_length(int): max context length of respective embedding model
     Returns:
     content(list): a list of extracted chunks where each chunks is a dict. The chunks content can be accessed under argument "content"
 
@@ -60,7 +57,7 @@ def extract_pdf_content(pdf_path, max_context_length=512):
 
     if title_elements:
         title_elements[-1]["next_title"] = ""
-        
+
     # Debugging
     # print(f" Total elements extracted: {len(content)}")
     # print(f" Titles found: {len(title_elements)}")
@@ -85,6 +82,7 @@ def extract_pdf_content(pdf_path, max_context_length=512):
     #         break  # just show one
 
     return content
+
 
 def extract_text_from_pdf(pdf_path):
     """
