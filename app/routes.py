@@ -61,8 +61,9 @@ def create_paper():
     authors = request.form.get("authors", "")
 
     try:
-        # Save the uploaded file temporarily
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+        # Save the uploaded file temporarily but preserve original filename
+        original_filename = file.filename
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{original_filename}") as temp_file:
             file.save(temp_file.name)
             # Try to get metadata from arxiv
             paper_metadata = arxiv_retriever.paper_get_metadata(temp_file.name)
