@@ -1,5 +1,9 @@
 import pytest
 from unittest.mock import patch, MagicMock
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from modules.ollama.ollama_client import get_paper_info  
 
 
@@ -21,9 +25,9 @@ def mock_response_dict():
     }
 
 
-@patch("your_module.os.path.exists")
-@patch("your_module.pdfreader")
-@patch("your_module.instructor.from_openai")
+@patch("modules.ollama.ollama_client.os.path.exists")
+@patch("modules.ollama.ollama_client.pdfreader")
+@patch("modules.ollama.ollama_client.instructor.from_openai")
 def test_get_paper_info_success(mock_instructor, mock_pdfreader, mock_exists, mock_pdf_text, mock_response_dict):
     # Setup mocks
     mock_exists.return_value = True
@@ -50,8 +54,9 @@ def test_get_paper_info_success(mock_instructor, mock_pdfreader, mock_exists, mo
     assert "keywords" in result
 
 
-@patch("your_module.os.path.exists")
+@patch("modules.ollama.ollama_client.os.path.exists")
 def test_get_paper_info_file_not_found(mock_exists):
+
     mock_exists.return_value = False
 
     with pytest.raises(FileNotFoundError):

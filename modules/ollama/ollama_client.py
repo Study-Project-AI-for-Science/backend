@@ -10,12 +10,11 @@ import os
 import time
 import logging
 from typing import List, Optional, Dict
-import pymupdf
 import ollama
 from transformers import AutoTokenizer
 from dotenv import load_dotenv
 import pdfreader
-import OpenAI
+from openai import OpenAI
 from modules.ollama.pydantic_classes import PaperMetadata
 import instructor
 
@@ -125,12 +124,13 @@ def _extract_text_from_pdf(pdf_path: str) -> str:
     and handling of various PDF formats.
     """
     try:
-        with pymupdf.open(pdf_path) as doc:
+        import fitz
+        with fitz.open(pdf_path) as doc:
             text = ""
             for page in doc:
                 text += page.get_text()
             return text
-    except pymupdf.FileNotFoundError as err:
+    except fitz.FileNotFoundError as err:
         logger.error(f"PDF file not found: {pdf_path}")
         raise FileNotFoundError(f"File not found: {pdf_path}") from err
     except Exception as e:
