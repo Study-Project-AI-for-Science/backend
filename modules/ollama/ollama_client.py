@@ -10,11 +10,14 @@ import os
 import time
 import logging
 from typing import List, Optional, Dict
-import faker
 import pymupdf
 import ollama
 from transformers import AutoTokenizer
 from dotenv import load_dotenv
+import pdfreader
+import OpenAI
+from modules.ollama.pydantic_classes import PaperMetadata
+import instructor
 
 # Force reload of environment variables
 load_dotenv(override=True)
@@ -278,14 +281,45 @@ def get_paper_info(file_path: str) -> dict:  #!TODO: Need to implement this func
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found: {file_path}")
 
-        fake = faker.Faker()
-        # Generate a fake title.
-        title = fake.sentence(nb_words=6).rstrip(".")
-        # Randomly choose between 1 to 5 authors.
-        num_authors = fake.random_int(min=1, max=5)
-        authors = ", ".join(fake.name() for _ in range(num_authors))
+        reader = pdfreader(file_path)
+        first_page = reader.pages[0]
+        text = first_page.extract_text()
+            
+        # enables `response_model` in create call
+        client = instructor.from_openai(
+            OpenAI(
+                base_url="http://localhost:11434",
+                api_key="ollama",  # required, but unused
+            ),
+            mode=instructor.Mode.JSON,
+        )
 
-        return {"title": title, "authors": authors}
+        resp = client.chat.completions.create(
+            model=OLLAMA_MODEL,
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        "You are a helpful assistant. Extract the metadata from the first page of this academic paper. "
+                        "Return only the structured information in JSON format matching the following fields:\n"
+                        "- title: The full title of the paper as a string\n"
+                        "- authors: A list of author names as a list of strings\n"
+                        "- field_of_study: The general research area (e.g., Computer Science, Biology), if identifiable as a string\n"
+                        "- journal: The journal name, if available\n"
+                        "- publication_date: The publication date in ISO format (YYYY-MM-DD), if found as a date\n"
+                        "- doi: The Digital Object Identifier (DOI), if available as a string\n"
+                        "- keywords: A list of keywords, if listed as a list of strings\n\n"
+                        "Only return fields you can confidently extract from the page — do not guess or fabricate.\n\n"
+                        "Here is the first page of the paper:\n\n"
+                        f"{text}"
+                    ),
+                }
+            ],
+            response_model=PaperMetadata,
+        )
+                
+        
+        return resp.model_dump()
     except Exception as e:
-        logger.error(f"Error generating fake paper info for {file_path}: {e}")
+        logger.error(f"Error generating paper info for {file_path}: {e}")
         raise e
