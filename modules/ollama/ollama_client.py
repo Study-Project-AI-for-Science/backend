@@ -21,6 +21,8 @@ import instructor
 # Force reload of environment variables
 load_dotenv(override=True)
 
+from module.pdf_extractor import extract_pdf_content
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -118,91 +120,6 @@ def _send_embed_request_to_ollama(input_text: str, model: str) -> Optional[List[
     return None
 
 
-def _extract_text_from_pdf(pdf_path: str) -> str:
-    """
-    Extracts text content from a PDF file using PyMuPDF for better accuracy
-    and handling of various PDF formats.
-    """
-    try:
-        import fitz
-        with fitz.open(pdf_path) as doc:
-            text = ""
-            for page in doc:
-                text += page.get_text()
-            return text
-    except fitz.FileNotFoundError as err:
-        logger.error(f"PDF file not found: {pdf_path}")
-        raise FileNotFoundError(f"File not found: {pdf_path}") from err
-    except Exception as e:
-        logger.error(f"Error extracting text from PDF: {e}")
-        raise
-
-
-def _split_text_into_segments(text: str, max_tokens: int = 512) -> List[str]:
-    """
-    Splits text into segments of approximately max_tokens tokens.
-    Uses a tokenizer to properly count tokens and split text appropriately.
-    """
-    if not TOKENIZER:
-        raise TokenizerNotAvailableError(
-            model_name="mixedbread-ai/mxbai-embed-large-v1",
-            detail="Tokenizer failed to initialize during module startup",
-        )
-
-    # Split initial text into paragraphs to maintain some structure
-    paragraphs = [p.strip() for p in text.split("\n") if p.strip()]
-
-    segments = []
-    current_segment = ""
-    current_tokens = []
-
-    for para in paragraphs:
-        # Tokenize the paragraph
-        para_tokens = TOKENIZER.encode(para, add_special_tokens=False, return_tensors="np")[0].tolist()
-
-        # If single paragraph is longer than max_tokens, split it
-        if len(para_tokens) > max_tokens:
-            # First add any existing segment
-            if current_tokens:
-                segments.append(current_segment.strip())
-                current_segment = ""
-                current_tokens = []
-
-            # Split long paragraph into smaller chunks
-            words = para.split()
-            # TODO: maybe sentence tokenizer
-            current_chunk = []
-            for word in words:
-                word_tokens = TOKENIZER.encode(word + " ", add_special_tokens=False)
-                if len(current_tokens) + len(word_tokens) <= max_tokens:
-                    current_tokens.extend(word_tokens.tolist())
-                    current_chunk.append(word)
-                else:
-                    segments.append(" ".join(current_chunk))
-                    current_chunk = [word]
-                    current_tokens = word_tokens.tolist()
-
-            if current_chunk:
-                segments.append(" ".join(current_chunk))
-                current_tokens = []
-                current_segment = ""
-
-        # For normal-sized paragraphs
-        else:
-            if len(current_tokens) + len(para_tokens) <= max_tokens:
-                current_segment += para + " "
-                current_tokens.extend(para_tokens)
-            else:
-                segments.append(current_segment.strip())
-                current_segment = para + " "
-                current_tokens = para_tokens
-
-    if current_segment:
-        segments.append(current_segment.strip())
-
-    return segments
-
-
 # --- Main API Functions ---
 
 
@@ -218,22 +135,16 @@ def get_paper_embeddings(pdf_path: str) -> Dict[str, List[List[float]]]:
         - model_version: Version of the model used
     """
     try:
-        text_content = _extract_text_from_pdf(pdf_path)
+        text_content = extract_pdf_content(pdf_path) # extracts & splits content into chunks
         if not text_content:
             logger.warning(f"No text extracted from PDF: {pdf_path}")
             return {"embeddings": [], "model_name": OLLAMA_EMBEDDING_MODEL, "model_version": "1.0"}
 
-        # Split text into segments
-        try:
-            text_segments = _split_text_into_segments(text_content)
-        except TokenizerNotAvailableError as e:
-            logger.error(f"Failed to segment text: {e}")
-            raise
 
         # Get embeddings for each segment
         embeddings = []
-        for segment in text_segments:
-            embedding = _send_embed_request_to_ollama(segment, model=OLLAMA_EMBEDDING_MODEL)
+        for chunk in text_content:
+            embedding = _send_embed_request_to_ollama(chunk.get("content"), model=OLLAMA_EMBEDDING_MODEL)
             if embedding:
                 embeddings.append(embedding)
             else:
