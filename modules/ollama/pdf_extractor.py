@@ -86,3 +86,18 @@ def extract_pdf_content(pdf_path, max_context_length=512):
 
     return content
 
+def extract_text_from_pdf(pdf_path):
+    """
+    Extracts text from a PDF using the unstructured library.
+
+    Args:
+        pdf_path (str): Path to the PDF file.
+        output_file (str, optional): Path to save the extracted text. If None, text is not saved.
+
+    Returns:
+        str: Extracted text from the PDF.
+    """
+    elements = partition_pdf(filename=pdf_path)
+    extracted_text = "\n".join(str(element) for element in elements)
+
+    return extracted_text
