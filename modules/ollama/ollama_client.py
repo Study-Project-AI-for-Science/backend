@@ -10,14 +10,19 @@ import os
 import time
 import logging
 from typing import List, Optional, Dict
-import faker
-import pymupdf
 import ollama
+import pymupdf
 from transformers import AutoTokenizer
 from dotenv import load_dotenv
+from openai import OpenAI
+import httpx
+from modules.ollama.pydantic_classes import PaperMetadata
+from modules.ollama.pdf_extractor import extract_pdf_content
+import instructor
 
 # Force reload of environment variables
 load_dotenv(override=True)
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -39,7 +44,7 @@ class OllamaInitializationError(Exception):
 # --- Configuration ---
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")  # Default to localhost if not specified
 logger.info(f"OLLAMA_HOST is set to: {OLLAMA_HOST}")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistralai/Mistral-7B-Instruct-v0.1")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1")
 OLLAMA_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "mxbai-embed-large")
 OLLAMA_USERNAME = os.getenv("OLLAMA_USERNAME", "")
 OLLAMA_PASSWORD = os.getenv("OLLAMA_PASSWORD", "")
@@ -70,6 +75,10 @@ def _initialize_module():
 
         OLLAMA_CLIENT.pull(OLLAMA_EMBEDDING_MODEL)
         logger.info(f"Successfully pulled Ollama model: {OLLAMA_EMBEDDING_MODEL}")
+
+        # Also pull the chat model
+        OLLAMA_CLIENT.pull(OLLAMA_MODEL)
+        logger.info(f"Successfully pulled Ollama model: {OLLAMA_MODEL}")
     except Exception as e:
         logger.error(f"Failed to initialize module: {e}")
         raise OllamaInitializationError(f"Failed to initialize Ollama: {e}") from e
@@ -116,90 +125,6 @@ def _send_embed_request_to_ollama(input_text: str, model: str) -> Optional[List[
     return None
 
 
-def _extract_text_from_pdf(pdf_path: str) -> str:
-    """
-    Extracts text content from a PDF file using PyMuPDF for better accuracy
-    and handling of various PDF formats.
-    """
-    try:
-        with pymupdf.open(pdf_path) as doc:
-            text = ""
-            for page in doc:
-                text += page.get_text()
-            return text
-    except pymupdf.FileNotFoundError as err:
-        logger.error(f"PDF file not found: {pdf_path}")
-        raise FileNotFoundError(f"File not found: {pdf_path}") from err
-    except Exception as e:
-        logger.error(f"Error extracting text from PDF: {e}")
-        raise
-
-
-def _split_text_into_segments(text: str, max_tokens: int = 512) -> List[str]:
-    """
-    Splits text into segments of approximately max_tokens tokens.
-    Uses a tokenizer to properly count tokens and split text appropriately.
-    """
-    if not TOKENIZER:
-        raise TokenizerNotAvailableError(
-            model_name="mixedbread-ai/mxbai-embed-large-v1",
-            detail="Tokenizer failed to initialize during module startup",
-        )
-
-    # Split initial text into paragraphs to maintain some structure
-    paragraphs = [p.strip() for p in text.split("\n") if p.strip()]
-
-    segments = []
-    current_segment = ""
-    current_tokens = []
-
-    for para in paragraphs:
-        # Tokenize the paragraph
-        para_tokens = TOKENIZER.encode(para, add_special_tokens=False, return_tensors="np")[0].tolist()
-
-        # If single paragraph is longer than max_tokens, split it
-        if len(para_tokens) > max_tokens:
-            # First add any existing segment
-            if current_tokens:
-                segments.append(current_segment.strip())
-                current_segment = ""
-                current_tokens = []
-
-            # Split long paragraph into smaller chunks
-            words = para.split()
-            # TODO: maybe sentence tokenizer
-            current_chunk = []
-            for word in words:
-                word_tokens = TOKENIZER.encode(word + " ", add_special_tokens=False)
-                if len(current_tokens) + len(word_tokens) <= max_tokens:
-                    current_tokens.extend(word_tokens.tolist())
-                    current_chunk.append(word)
-                else:
-                    segments.append(" ".join(current_chunk))
-                    current_chunk = [word]
-                    current_tokens = word_tokens.tolist()
-
-            if current_chunk:
-                segments.append(" ".join(current_chunk))
-                current_tokens = []
-                current_segment = ""
-
-        # For normal-sized paragraphs
-        else:
-            if len(current_tokens) + len(para_tokens) <= max_tokens:
-                current_segment += para + " "
-                current_tokens.extend(para_tokens)
-            else:
-                segments.append(current_segment.strip())
-                current_segment = para + " "
-                current_tokens = para_tokens
-
-    if current_segment:
-        segments.append(current_segment.strip())
-
-    return segments
-
-
 # --- Main API Functions ---
 
 
@@ -215,22 +140,15 @@ def get_paper_embeddings(pdf_path: str) -> Dict[str, List[List[float]]]:
         - model_version: Version of the model used
     """
     try:
-        text_content = _extract_text_from_pdf(pdf_path)
+        text_content = extract_pdf_content(pdf_path)  # extracts & splits content into chunks
         if not text_content:
             logger.warning(f"No text extracted from PDF: {pdf_path}")
             return {"embeddings": [], "model_name": OLLAMA_EMBEDDING_MODEL, "model_version": "1.0"}
 
-        # Split text into segments
-        try:
-            text_segments = _split_text_into_segments(text_content)
-        except TokenizerNotAvailableError as e:
-            logger.error(f"Failed to segment text: {e}")
-            raise
-
         # Get embeddings for each segment
         embeddings = []
-        for segment in text_segments:
-            embedding = _send_embed_request_to_ollama(segment, model=OLLAMA_EMBEDDING_MODEL)
+        for chunk in text_content:
+            embedding = _send_embed_request_to_ollama(chunk.get("content"), model=OLLAMA_EMBEDDING_MODEL)
             if embedding:
                 embeddings.append(embedding)
             else:
@@ -274,18 +192,71 @@ def get_paper_info(file_path: str) -> dict:  #!TODO: Need to implement this func
       FileNotFoundError:  If the file_path does not exist
       Exception:  For any other errors during processing
     """
+
+    logger.info(f"Returning fake metadata for paper: {file_path}")
+    return {
+        "title": "Sample Academic Paper Title",
+        "authors": ["John Doe", "Jane Smith", "Alex Johnson"],
+        "field_of_study": "Computer Science",
+        "journal": "Journal of AI Research",
+        "publication_date": "2025-03-28",
+        "doi": "10.1234/sample.5678",
+        "keywords": ["artificial intelligence", "machine learning", "neural networks"],
+    }
+
+    _initialize_module()  # Ensure Ollama is initialized
     try:
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found: {file_path}")
 
-        fake = faker.Faker()
-        # Generate a fake title.
-        title = fake.sentence(nb_words=6).rstrip(".")
-        # Randomly choose between 1 to 5 authors.
-        num_authors = fake.random_int(min=1, max=5)
-        authors = ", ".join(fake.name() for _ in range(num_authors))
+        # Use PDFDocument from pdfreader module instead of calling pdfreader directly
+        # doc = pdfreader.PDFDocument(file_path)
+        # first_page = doc.pages[0]
+        # text = first_page.extract_text()
 
-        return {"title": title, "authors": authors}
+        doc = pymupdf.open(file_path)
+        if doc.page_count > 0:
+            first_page = doc.load_page(0)
+            text = first_page.get_text("text")
+
+        # enables `response_model` in create call
+        client = instructor.from_openai(
+            OpenAI(
+                base_url=f"{OLLAMA_HOST.rstrip('/')}/v1",  # Use the OpenAI compatibility endpoint, ensure no double slashes
+                api_key="ollama",  # required, but unused
+                http_client=httpx.Client(
+                    auth=httpx.BasicAuth(username=OLLAMA_USERNAME, password=OLLAMA_PASSWORD) if OLLAMA_USERNAME and OLLAMA_PASSWORD else None,
+                    timeout=OLLAMA_API_TIMEOUT,
+                ),
+            ),
+            mode=instructor.Mode.JSON,
+        )
+
+        resp = client.chat.completions.create(
+            model=OLLAMA_MODEL,
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        "You are a helpful assistant. Extract the metadata from the first page of this academic paper. "
+                        "Return only the structured information in JSON format matching the following fields:\n"
+                        "- title: The full title of the paper as a string\n"
+                        "- authors: A list of author names as a list of strings\n"
+                        "- field_of_study: The general research area (e.g., Computer Science, Biology), if identifiable as a string\n"
+                        "- journal: The journal name, if available\n"
+                        "- publication_date: The publication date in ISO format (YYYY-MM-DD), if found as a date\n"
+                        "- doi: The Digital Object Identifier (DOI), if available as a string\n"
+                        "- keywords: A list of keywords, if listed as a list of strings\n\n"
+                        "Only return fields you can confidently extract from the page — do not guess or fabricate.\n\n"
+                        "Here is the first page of the paper:\n\n"
+                        f"{text}"
+                    ),
+                }
+            ],
+            response_model=PaperMetadata,
+        )
+
+        return resp.model_dump()
     except Exception as e:
-        logger.error(f"Error generating fake paper info for {file_path}: {e}")
+        logger.error(f"Error generating paper info for {file_path}: {e}")
         raise e

@@ -29,6 +29,14 @@ dependencies = [
     "arxiv>=2.1.3",
     "texsoup>=0.3.1",
     "pandoc>=2.4",
+    "openai>=1.69.0",
+    "pdfreader>=0.1.15",
+    "instructor>=1.7.7",
+    "unstructured[pdf]>=0.17.2",
+    "pdfminer.six>=20221105",
+    "pi-heif>=0.13.0",
+    "unstructured-inference>=0.7.24",
+    "pdf2image>=1.17.0",
 ]
 
 [build-system]
@@ -56,5 +64,8 @@ testpaths = [
 filterwarnings = [
     "ignore:builtin type SwigPyPacked has no __module__ attribute:DeprecationWarning",
     "ignore:builtin type SwigPyObject has no __module__ attribute:DeprecationWarning",
-    "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning"
+    "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning",
+    "ignore:read_text is deprecated:DeprecationWarning",
+    "ignore:open_text is deprecated:DeprecationWarning",
+    "ignore:min_items is deprecated:DeprecationWarning"
 ]
