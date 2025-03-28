@@ -69,9 +69,9 @@ def test_extract_text_from_pdf(test_pdf):
         element2.__str__.return_value = "pdf"
         element3 = MagicMock()
         element3.__str__.return_value = "content"
-        
+
         mock_partition_pdf.return_value = [element1, element2, element3]
-        
+
         extracted_text = extract_text_from_pdf(test_pdf)
         assert "test\npdf\ncontent" == extracted_text
         mock_partition_pdf.assert_called_once_with(filename=test_pdf)
@@ -88,31 +88,31 @@ def test_extract_text_from_pdf_file_not_found():
 def test_get_paper_embeddings_success(mock_module_globals, test_pdf):
     """Test successful paper embedding generation"""
     _, mock_ollama_client = mock_module_globals
-    
+
     with patch("modules.ollama.ollama_client.extract_pdf_content") as mock_extract_pdf_content:
         # Mock the extract_pdf_content function to return a list of content chunks
         mock_extract_pdf_content.return_value = [{"content": "test content"}]
-        
+
         result = get_paper_embeddings(test_pdf)
         assert isinstance(result, dict)
         assert "embeddings" in result
         assert len(result["embeddings"]) > 0
         assert result["model_name"] == OLLAMA_EMBEDDING_MODEL
-        
+
         mock_extract_pdf_content.assert_called_once_with(test_pdf)
 
 
 def test_get_paper_embeddings_empty_pdf(mock_module_globals, test_pdf):
     """Test handling of empty PDF content"""
     _, mock_ollama_client = mock_module_globals
-    
+
     with patch("modules.ollama.ollama_client.extract_pdf_content") as mock_extract_pdf_content:
         # Mock the extract_pdf_content function to return an empty list
         mock_extract_pdf_content.return_value = []
-        
+
         result = get_paper_embeddings(test_pdf)
         assert result["embeddings"] == []
-        
+
         mock_extract_pdf_content.assert_called_once_with(test_pdf)
 
 
@@ -139,19 +139,21 @@ def test_get_query_embeddings_whitespace():
 def test_get_paper_info_success():
     """Test successful paper info retrieval"""
     test_file = "test_paper.pdf"
-    with patch("os.path.exists") as mock_exists, \
-         patch("modules.ollama.ollama_client.pdfreader") as mock_pdfreader, \
-         patch("instructor.from_openai") as mock_instructor:
+    with (
+        patch("os.path.exists") as mock_exists,
+        patch("modules.ollama.ollama_client.pdfreader") as mock_pdfreader,
+        patch("instructor.from_openai") as mock_instructor,
+    ):
         # Mock exists to return True
         mock_exists.return_value = True
-        
+
         # Mock pdfreader.PDFDocument to return a proper mock object
         mock_doc = MagicMock()
         mock_page = MagicMock()
         mock_page.extract_text.return_value = "Test Paper Title\nAuthor Name"
         mock_doc.pages = [mock_page]
         mock_pdfreader.PDFDocument.return_value = mock_doc
-        
+
         # Mock instructor response
         mock_client = MagicMock()
         mock_resp = MagicMock()
@@ -162,11 +164,11 @@ def test_get_paper_info_success():
             "journal": None,
             "publication_date": None,
             "doi": None,
-            "keywords": []
+            "keywords": [],
         }
         mock_client.chat.completions.create.return_value = mock_resp
         mock_instructor.return_value = mock_client
-        
+
         result = get_paper_info(test_file)
         assert isinstance(result, dict)
         assert result["title"] == "Test Paper Title"

@@ -4,6 +4,7 @@ from flask import Flask
 from unittest.mock import patch
 from app.routes import bp
 
+
 # Suppress specific deprecation warnings that are coming from dependencies
 def pytest_configure(config):
     """Configure pytest - suppress specific deprecation warnings."""
@@ -12,7 +13,8 @@ def pytest_configure(config):
     warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*open_text is deprecated.*")
     # Filter out Pydantic deprecation warnings if they appear
     warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*min_items is deprecated.*")
-    
+
+
 @pytest.fixture
 def mock_db():
     with patch("app.routes.db") as mock_db:

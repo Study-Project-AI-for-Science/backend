@@ -15,6 +15,7 @@ from uuid_extensions import uuid7str as uuid7
 
 from modules.ollama import ollama_client
 from modules.storage import storage
+from modules.ollama.pdf_extractor import extract_text_from_pdf
 
 import tempfile
 import shutil
@@ -281,6 +282,9 @@ def paper_insert(
             published = None
         if updated == "":
             updated = None
+            
+        if markdown_content == "":
+            markdown_content = extract_text_from_pdf(file_path)
 
         with psycopg.connect(POSTGRES_URL, row_factory=dict_row) as conn:
             with conn.cursor() as cur:
@@ -297,10 +301,12 @@ def paper_insert(
                     (paper_id, title, authors, file_url, file_hash, abstract, paper_url, published, updated, markdown_content),
                 )
 
-                # Insert one record per embedding
+                # Insert one record per embedding with ON CONFLICT DO NOTHING to handle duplicates
+                #! TODO: This is a temporary solution, we should handle duplicates more gracefully
                 embed_insert_query = """
                     INSERT INTO paper_embeddings (paper_id, embedding, model_name, model_version)
-                    VALUES (%s, %s, %s, %s);
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (paper_id, model_name, model_version, embedding_hash) DO NOTHING;
                 """
                 for emb in embeddings:
                     cur.execute(embed_insert_query, (paper_id, emb, model_name, model_version))
@@ -314,7 +320,11 @@ def paper_insert(
         raise
     except psycopg.Error as e:
         logger.error(f"Failed to insert paper: {e}")
-        raise DatabaseError(f"Database error while inserting paper: {str(e)}") from e
+        if "paper_embeddings_unique_combination" in str(e):
+            #! TODO: This is only a temporal help, we should get rid of this error
+            raise DatabaseError("Duplicate embedding detected. This paper may already exist in the database.") from e
+        else:
+            raise DatabaseError(f"Database error while inserting paper: {str(e)}") from e
     except Exception as e:
         logger.error(f"Unexpected error while inserting paper: {e}")
         raise DatabaseError(f"Failed to insert paper: {str(e)}") from e

@@ -11,17 +11,17 @@ import time
 import logging
 from typing import List, Optional, Dict
 import ollama
+import pymupdf
 from transformers import AutoTokenizer
 from dotenv import load_dotenv
-import pdfreader
 from openai import OpenAI
+import httpx
 from modules.ollama.pydantic_classes import PaperMetadata
 from modules.ollama.pdf_extractor import extract_pdf_content
 import instructor
 
 # Force reload of environment variables
 load_dotenv(override=True)
-
 
 
 # Configure logging
@@ -44,7 +44,7 @@ class OllamaInitializationError(Exception):
 # --- Configuration ---
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")  # Default to localhost if not specified
 logger.info(f"OLLAMA_HOST is set to: {OLLAMA_HOST}")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistralai/Mistral-7B-Instruct-v0.1")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1")
 OLLAMA_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "mxbai-embed-large")
 OLLAMA_USERNAME = os.getenv("OLLAMA_USERNAME", "")
 OLLAMA_PASSWORD = os.getenv("OLLAMA_PASSWORD", "")
@@ -75,6 +75,10 @@ def _initialize_module():
 
         OLLAMA_CLIENT.pull(OLLAMA_EMBEDDING_MODEL)
         logger.info(f"Successfully pulled Ollama model: {OLLAMA_EMBEDDING_MODEL}")
+        
+        # Also pull the chat model
+        OLLAMA_CLIENT.pull(OLLAMA_MODEL)
+        logger.info(f"Successfully pulled Ollama model: {OLLAMA_MODEL}")
     except Exception as e:
         logger.error(f"Failed to initialize module: {e}")
         raise OllamaInitializationError(f"Failed to initialize Ollama: {e}") from e
@@ -188,20 +192,45 @@ def get_paper_info(file_path: str) -> dict:  #!TODO: Need to implement this func
       FileNotFoundError:  If the file_path does not exist
       Exception:  For any other errors during processing
     """
+    
+    logger.info(f"Returning fake metadata for paper: {file_path}")
+    return {
+        "title": "Sample Academic Paper Title",
+        "authors": ["John Doe", "Jane Smith", "Alex Johnson"],
+        "field_of_study": "Computer Science",
+        "journal": "Journal of AI Research",
+        "publication_date": "2025-03-28",
+        "doi": "10.1234/sample.5678",
+        "keywords": ["artificial intelligence", "machine learning", "neural networks"]
+    }
+    
+    
+    _initialize_module()  # Ensure Ollama is initialized
     try:
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found: {file_path}")
 
         # Use PDFDocument from pdfreader module instead of calling pdfreader directly
-        doc = pdfreader.PDFDocument(file_path)
-        first_page = doc.pages[0]
-        text = first_page.extract_text()
+        # doc = pdfreader.PDFDocument(file_path)
+        # first_page = doc.pages[0]
+        # text = first_page.extract_text()
         
+        
+        doc = pymupdf.open(file_path)
+        if doc.page_count > 0:
+            first_page = doc.load_page(0)
+            text = first_page.get_text("text")
+
         # enables `response_model` in create call
         client = instructor.from_openai(
             OpenAI(
-                base_url="http://localhost:11434",
+                base_url=f"{OLLAMA_HOST.rstrip('/')}/v1",  # Use the OpenAI compatibility endpoint, ensure no double slashes
                 api_key="ollama",  # required, but unused
+                http_client=httpx.Client(
+                    auth=httpx.BasicAuth(username=OLLAMA_USERNAME, password=OLLAMA_PASSWORD)
+                    if OLLAMA_USERNAME and OLLAMA_PASSWORD else None,
+                    timeout=OLLAMA_API_TIMEOUT
+                )
             ),
             mode=instructor.Mode.JSON,
         )
