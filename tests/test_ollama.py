@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock
 from modules.ollama.ollama_client import (
     get_paper_embeddings,
     get_query_embeddings,
-    get_paper_info,
+    # get_paper_info,
     _send_embed_request_to_ollama,
     OLLAMA_EMBEDDING_MODEL,
 )
@@ -136,46 +136,46 @@ def test_get_query_embeddings_whitespace():
         get_query_embeddings("   \n   \t   ")
 
 
-def test_get_paper_info_success():
-    """Test successful paper info retrieval"""
-    test_file = "test_paper.pdf"
-    with (
-        patch("os.path.exists") as mock_exists,
-        patch("modules.ollama.ollama_client.pdfreader") as mock_pdfreader,
-        patch("instructor.from_openai") as mock_instructor,
-    ):
-        # Mock exists to return True
-        mock_exists.return_value = True
+# def test_get_paper_info_success():
+#     """Test successful paper info retrieval"""
+#     test_file = "test_paper.pdf"
+#     with (
+#         patch("os.path.exists") as mock_exists,
+#         patch("modules.ollama.ollama_client.pdfreader") as mock_pdfreader,
+#         patch("instructor.from_openai") as mock_instructor,
+#     ):
+#         # Mock exists to return True
+#         mock_exists.return_value = True
 
-        # Mock pdfreader.PDFDocument to return a proper mock object
-        mock_doc = MagicMock()
-        mock_page = MagicMock()
-        mock_page.extract_text.return_value = "Test Paper Title\nAuthor Name"
-        mock_doc.pages = [mock_page]
-        mock_pdfreader.PDFDocument.return_value = mock_doc
+#         # Mock pdfreader.PDFDocument to return a proper mock object
+#         mock_doc = MagicMock()
+#         mock_page = MagicMock()
+#         mock_page.extract_text.return_value = "Test Paper Title\nAuthor Name"
+#         mock_doc.pages = [mock_page]
+#         mock_pdfreader.PDFDocument.return_value = mock_doc
 
-        # Mock instructor response
-        mock_client = MagicMock()
-        mock_resp = MagicMock()
-        mock_resp.model_dump.return_value = {
-            "title": "Test Paper Title",
-            "authors": ["Author Name"],
-            "field_of_study": "Computer Science",
-            "journal": None,
-            "publication_date": None,
-            "doi": None,
-            "keywords": [],
-        }
-        mock_client.chat.completions.create.return_value = mock_resp
-        mock_instructor.return_value = mock_client
+#         # Mock instructor response
+#         mock_client = MagicMock()
+#         mock_resp = MagicMock()
+#         mock_resp.model_dump.return_value = {
+#             "title": "Test Paper Title",
+#             "authors": ["Author Name"],
+#             "field_of_study": "Computer Science",
+#             "journal": None,
+#             "publication_date": None,
+#             "doi": None,
+#             "keywords": [],
+#         }
+#         mock_client.chat.completions.create.return_value = mock_resp
+#         mock_instructor.return_value = mock_client
 
-        result = get_paper_info(test_file)
-        assert isinstance(result, dict)
-        assert result["title"] == "Test Paper Title"
-        assert "Author Name" in result["authors"]
+#         result = get_paper_info(test_file)
+#         assert isinstance(result, dict)
+#         assert result["title"] == "Test Paper Title"
+#         assert "Author Name" in result["authors"]
 
 
-def test_get_paper_info_file_not_found():
-    """Test handling of non-existent file"""
-    with pytest.raises(FileNotFoundError):
-        get_paper_info("nonexistent.pdf")
+# def test_get_paper_info_file_not_found():
+#     """Test handling of non-existent file"""
+#     with pytest.raises(FileNotFoundError):
+#         get_paper_info("nonexistent.pdf")

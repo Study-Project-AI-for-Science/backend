@@ -282,7 +282,7 @@ def paper_insert(
             published = None
         if updated == "":
             updated = None
-            
+
         if markdown_content == "":
             markdown_content = extract_text_from_pdf(file_path)
 

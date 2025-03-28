@@ -75,7 +75,7 @@ def _initialize_module():
 
         OLLAMA_CLIENT.pull(OLLAMA_EMBEDDING_MODEL)
         logger.info(f"Successfully pulled Ollama model: {OLLAMA_EMBEDDING_MODEL}")
-        
+
         # Also pull the chat model
         OLLAMA_CLIENT.pull(OLLAMA_MODEL)
         logger.info(f"Successfully pulled Ollama model: {OLLAMA_MODEL}")
@@ -192,7 +192,7 @@ def get_paper_info(file_path: str) -> dict:  #!TODO: Need to implement this func
       FileNotFoundError:  If the file_path does not exist
       Exception:  For any other errors during processing
     """
-    
+
     logger.info(f"Returning fake metadata for paper: {file_path}")
     return {
         "title": "Sample Academic Paper Title",
@@ -201,10 +201,9 @@ def get_paper_info(file_path: str) -> dict:  #!TODO: Need to implement this func
         "journal": "Journal of AI Research",
         "publication_date": "2025-03-28",
         "doi": "10.1234/sample.5678",
-        "keywords": ["artificial intelligence", "machine learning", "neural networks"]
+        "keywords": ["artificial intelligence", "machine learning", "neural networks"],
     }
-    
-    
+
     _initialize_module()  # Ensure Ollama is initialized
     try:
         if not os.path.exists(file_path):
@@ -214,8 +213,7 @@ def get_paper_info(file_path: str) -> dict:  #!TODO: Need to implement this func
         # doc = pdfreader.PDFDocument(file_path)
         # first_page = doc.pages[0]
         # text = first_page.extract_text()
-        
-        
+
         doc = pymupdf.open(file_path)
         if doc.page_count > 0:
             first_page = doc.load_page(0)
@@ -227,10 +225,9 @@ def get_paper_info(file_path: str) -> dict:  #!TODO: Need to implement this func
                 base_url=f"{OLLAMA_HOST.rstrip('/')}/v1",  # Use the OpenAI compatibility endpoint, ensure no double slashes
                 api_key="ollama",  # required, but unused
                 http_client=httpx.Client(
-                    auth=httpx.BasicAuth(username=OLLAMA_USERNAME, password=OLLAMA_PASSWORD)
-                    if OLLAMA_USERNAME and OLLAMA_PASSWORD else None,
-                    timeout=OLLAMA_API_TIMEOUT
-                )
+                    auth=httpx.BasicAuth(username=OLLAMA_USERNAME, password=OLLAMA_PASSWORD) if OLLAMA_USERNAME and OLLAMA_PASSWORD else None,
+                    timeout=OLLAMA_API_TIMEOUT,
+                ),
             ),
             mode=instructor.Mode.JSON,
         )
