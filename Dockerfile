@@ -16,7 +16,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
     libpq-dev \
+    ffmpeg libsm6 libxext6 \
     pandoc \
+    poppler-utils \
+    tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy project files
@@ -34,4 +37,4 @@ RUN pip install --no-cache-dir .
 EXPOSE 5000
 
 # Command to run the application
-CMD ["sh", "-c", "python scripts/run_migrations.py && python scripts/create_bucket.py && gunicorn -w ${GUNICORN_WORKERS} --timeout 120 -b 0.0.0.0:5000 'app:create_app()'"]
+CMD ["sh", "-c", "python scripts/run_migrations.py && python scripts/create_bucket.py && gunicorn -w ${GUNICORN_WORKERS} --timeout 900 -b 0.0.0.0:5000 'app:create_app()'"]
