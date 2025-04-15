@@ -7,6 +7,7 @@ import { join } from "path";
 import * as storage from "../storage/storage"
 import { generateEmbedding, getPaperInfo, getPaperEmbeddings, extractTextFromPdf, extractReferencesFromFile } from "../ollama/ollamaUtils"; // Assuming an embedding generation function exists
 import { parseLatexToMarkdown, extractReferences } from "../latexParser/latexUtils"
+import { useDrizzle } from "../../server/utils/drizzle";
 
 
 // Define the input type for a reference based on the example
@@ -553,7 +554,7 @@ async function processReferenceWithArxivId(
     const results = await Promise.all(extractionPromises);
 
     // Flatten the array of arrays and remove duplicates
-    arxivIds = [...new Set(results.flat())];
+    arxivIds = Array.from(new Set(results.flat()));
 
     if (!arxivIds || arxivIds.length === 0) {
       console.log("No ArXiv ID found in reference.");
