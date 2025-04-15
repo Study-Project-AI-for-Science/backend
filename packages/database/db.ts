@@ -25,7 +25,7 @@ export interface ReferenceInput {
  * @param filepath The path to the file
  * @returns Promise that resolves to the hex string hash
  */
-async function paperComputeFileHash(filepath: string): Promise<string> {
+export async function paperComputeFileHash(filepath: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const fileStream = createReadStream(filepath)
     const hash = createHash("sha256")
@@ -44,13 +44,13 @@ async function paperComputeFileHash(filepath: string): Promise<string> {
   })
 }
 
-async function paperFind(paperId: string): Promise<Record<string, any>> {
+export async function paperFind(paperId: string): Promise<Record<string, any>> {
   const paper = await useDrizzle().select().from(papers).where(eq(papers.id, paperId)).limit(1)
   // Assuming the query returns a single paper object
   return paper[0] || {}
 }
 
-async function paperGetFile(paperId: string, destinationPath: string): Promise<void> {
+export async function paperGetFile(paperId: string, destinationPath: string): Promise<void> {
   try {
     // 1. Find the paper record to get the file URL
     const paper = await paperFind(paperId);
@@ -72,7 +72,7 @@ async function paperGetFile(paperId: string, destinationPath: string): Promise<v
   }
 }
 
-async function paperGetEmbeddings(paperId: string): Promise<Record<string, any> | null> {
+export async function paperGetEmbeddings(paperId: string): Promise<Record<string, any> | null> {
   /**
    * Retrieves embeddings for a specific paper from the database.
    *
@@ -115,7 +115,7 @@ async function paperGetEmbeddings(paperId: string): Promise<Record<string, any> 
    * @param processReferences Flag to indicate if references should be processed (default: true).
    * @returns A promise that resolves to the ID of the inserted paper.
    */
-async function paperInsert(
+export async function paperInsert(
   filePath: string,
   title: string,
   authors: string,
@@ -288,7 +288,7 @@ async function paperInsert(
  * @param similarityDropout Minimum similarity score threshold (default: 0.0).
  * @returns A promise that resolves to an array of similar papers with their similarity scores.
  */
-async function paperGetSimilarToQuery(
+export async function paperGetSimilarToQuery(
   query: string,
   limit: number = 10,
   /**
@@ -348,7 +348,7 @@ async function paperGetSimilarToQuery(
   }
 }
 
-async function paperUpdate(paperId: string, updates: { [key: string]: any }): Promise<void> {
+export async function paperUpdate(paperId: string, updates: { [key: string]: any }): Promise<void> {
   await useDrizzle()
     .update(papers)
     .set(updates)
@@ -362,27 +362,73 @@ async function paperUpdate(paperId: string, updates: { [key: string]: any }): Pr
     })
 }
 
-async function paperDelete(paperId: string): Promise<void> {
-  await useDrizzle()
-    .delete(papers)
-    .where(eq(papers.id, paperId))
-    .returning()
-    .then((result) => {
-      console.log("Deleted paper:", result)
-      const fileUrlToDelete = result[0]?.fileUrl;
+export async function paperDelete(paperId: string): Promise<void> {
+  const db = useDrizzle(); // Get the Drizzle instance
+
+  try {
+    // Wrap all database operations in a transaction
+    await db.transaction(async (tx) => {
+      // 1. Delete associated embeddings
+      await tx.delete(paperEmbeddings).where(eq(paperEmbeddings.paperId, paperId));
+      console.log(`Deleted embeddings for paper ${paperId}`);
+
+      // 2. Delete references originating FROM this paper
+      await tx.delete(paperReferences).where(eq(paperReferences.paperId, paperId));
+      console.log(`Deleted references originating from paper ${paperId}`);
+
+      // 3. Nullify references pointing TO this paper
+      // Check if referencePaperId exists before updating
+      const referencesToUpdate = await tx.select({ id: paperReferences.id })
+                                        .from(paperReferences)
+                                        .where(eq(paperReferences.referencePaperId, paperId));
+
+      if (referencesToUpdate.length > 0) {
+        await tx.update(paperReferences)
+          .set({ referencePaperId: null }) // Set referencePaperId to null
+          .where(eq(paperReferences.referencePaperId, paperId));
+        console.log(`Nullified ${referencesToUpdate.length} references pointing to paper ${paperId}`);
+      } else {
+        console.log(`No references found pointing to paper ${paperId}.`);
+      }
+
+
+      // 4. Delete the paper itself and get the fileUrl
+      const deletedPaperResult = await tx.delete(papers)
+        .where(eq(papers.id, paperId))
+        .returning({ fileUrl: papers.fileUrl }); // Only return the fileUrl
+
+      if (deletedPaperResult.length === 0) {
+        // If the paper wasn't found, throw an error to rollback the transaction
+        throw new Error(`Paper with ID ${paperId} not found for deletion.`);
+      }
+      console.log(`Deleted paper record ${paperId}`);
+
+      // 5. Handle file deletion (contingent on transaction success)
+      // This part is outside the transaction block but relies on its successful completion
+      const fileUrlToDelete = deletedPaperResult[0]?.fileUrl;
       if (fileUrlToDelete) {
-        storage.deleteFile(fileUrlToDelete); // Call only if fileUrl exists
+        // Perform file deletion asynchronously after transaction commits
+        // We don't await this, as the primary goal is DB consistency.
+        // Log errors if file deletion fails.
+        storage.deleteFile(fileUrlToDelete).catch(err => {
+            console.error(`Error deleting file ${fileUrlToDelete} from storage:`, err);
+        });
+        console.log(`Initiated deletion of storage file: ${fileUrlToDelete}`);
       } else {
         console.warn(`File URL not found for deleted paper ${paperId}. Storage file not deleted.`);
-        // TODO: Handle the case where the file URL is not found
       }
-    })
-    .catch((error) => {
-      console.error("Error deleting paper:", error)
-    })
+    }); // Transaction commits here if no errors were thrown
+
+    console.log(`Successfully deleted paper ${paperId} and associated data.`);
+
+  } catch (error) {
+    console.error(`Error during deletion process for paper ${paperId}:`, error);
+    // Re-throw the error to signal failure to the caller
+    throw error;
+  }
 }
 
-async function paperListPaginated(
+export async function paperListPaginated(
   page: number = 1,
   pageSize: number = 10,
 ): Promise<{ papers: Record<string, any>[]; total: number }> {
@@ -403,7 +449,7 @@ async function paperListPaginated(
   }
 }
 
-async function paperFindByArxivId(arxivId: string): Promise<Record<string, any> | null> {
+export async function paperFindByArxivId(arxivId: string): Promise<Record<string, any> | null> {
   /**
    * Finds a paper in the database where the onlineUrl contains the given ArXiv ID.
    *
@@ -427,7 +473,7 @@ async function paperFindByArxivId(arxivId: string): Promise<Record<string, any> 
 }
 // References
 
-async function paperReferencesInsertMany(
+export async function paperReferencesInsertMany(
   paperId: string,
   references: ReferenceInput[],
 ): Promise<number> {
@@ -489,7 +535,7 @@ async function paperReferencesInsertMany(
   }
 }
 
-async function paperReferencesList(paperId: string): Promise<Record<string, any>[]> {
+export async function paperReferencesList(paperId: string): Promise<Record<string, any>[]> {
   /**
    * Retrieves all references for a specific paper from the database.
    * Queries the "paper_references" table to find all papers that are referenced
@@ -530,7 +576,7 @@ async function paperReferencesList(paperId: string): Promise<Record<string, any>
  * Example:
  *     const paperId = await processReferenceWithArxivId(reference, "/tmp/ref_papers");
  */
-async function processReferenceWithArxivId(
+export async function processReferenceWithArxivId(
   reference: Record<string, any>,
   tempDir: string,
 ): Promise<string | null> {
