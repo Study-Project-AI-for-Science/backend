@@ -1,0 +1,1 @@
+ALTER TABLE "paper_embeddings" DROP COLUMN "updated_at";
