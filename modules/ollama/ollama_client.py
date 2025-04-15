@@ -10,7 +10,7 @@ import os
 import time
 import logging
 from typing import List, Optional, Dict
-import ollama
+import modules
 import pymupdf
 from transformers import AutoTokenizer
 from dotenv import load_dotenv
@@ -178,32 +178,6 @@ def get_query_embeddings(query_string: str) -> Optional[List[float]]:
 
 
 def get_paper_info(file_path: str) -> dict:  #!TODO: Need to implement this function correctly,
-    # for now it returns fake data
-    """
-    Gets the metadata for a given PDF paper.
-
-    Args:
-        file_path: The path to the PDF file.
-
-    Returns:
-        A dictionary containing metadata information for the paper.
-
-    Raises:
-      FileNotFoundError:  If the file_path does not exist
-      Exception:  For any other errors during processing
-    """
-
-    logger.info(f"Returning fake metadata for paper: {file_path}")
-    return {
-        "title": "Sample Academic Paper Title",
-        "authors": ["John Doe", "Jane Smith", "Alex Johnson"],
-        "field_of_study": "Computer Science",
-        "journal": "Journal of AI Research",
-        "publication_date": "2025-03-28",
-        "doi": "10.1234/sample.5678",
-        "keywords": ["artificial intelligence", "machine learning", "neural networks"],
-    }
-
     _initialize_module()  # Ensure Ollama is initialized
     try:
         if not os.path.exists(file_path):
@@ -238,18 +212,26 @@ def get_paper_info(file_path: str) -> dict:  #!TODO: Need to implement this func
                 {
                     "role": "user",
                     "content": (
-                        "You are a helpful assistant. Extract the metadata from the first page of this academic paper. "
-                        "Return only the structured information in JSON format matching the following fields:\n"
-                        "- title: The full title of the paper as a string\n"
-                        "- authors: A list of author names as a list of strings\n"
-                        "- field_of_study: The general research area (e.g., Computer Science, Biology), if identifiable as a string\n"
-                        "- journal: The journal name, if available\n"
-                        "- publication_date: The publication date in ISO format (YYYY-MM-DD), if found as a date\n"
-                        "- doi: The Digital Object Identifier (DOI), if available as a string\n"
-                        "- keywords: A list of keywords, if listed as a list of strings\n\n"
-                        "Only return fields you can confidently extract from the page — do not guess or fabricate.\n\n"
-                        "Here is the first page of the paper:\n\n"
-                        f"{text}"
+                        "You are a helpful assistant. Extract metadata from the first page of the provided academic paper. "
+                        "Return the result as a **JSON object** matching this schema:\n\n"
+                        "```json\n"
+                        "{\n"
+                        '  "title": string, // Full paper title\n'
+                        '  "authors": [string], // List of author names\n'
+                        "  \"field_of_study\": string (optional), // General research area like 'Computer Science' or 'Biology'\n"
+                        '  "journal": string (optional), // Name of the journal\n'
+                        '  "publication_date": string (ISO 8601 format: YYYY-MM-DD),\n'
+                        '  "doi": string (optional), \n'
+                        '  "keywords": [string] // List of keywords\n'
+                        "}\n"
+                        "```\n\n"
+                        "**Important Notes:**\n"
+                        "- Only include fields you can confidently extract.\n"
+                        "- Do not guess, hallucinate, or fabricate data.\n"
+                        "- Follow ISO format for dates (e.g., 2024-01-15).\n"
+                        "- Validate DOI format strictly.\n"
+                        "- Author names must be full names, with at least one space.\n\n"
+                        f"First page of the paper:\n\n{text}"
                     ),
                 }
             ],
