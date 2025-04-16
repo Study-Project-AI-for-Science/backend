@@ -3,6 +3,7 @@ from unittest import mock
 from modules.ollama import ollama_client
 
 
+# testing for instructor
 @mock.patch("modules.ollama.ollama_client._initialize_module")
 @mock.patch("modules.ollama.ollama_client.os.path.exists", return_value=True)
 @mock.patch("modules.ollama.ollama_client.pymupdf.open")
