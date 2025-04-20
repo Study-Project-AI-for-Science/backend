@@ -1,56 +1,168 @@
-import { defineEventHandler, readBody, createError } from 'h3'
-import { paperInsert } from '../../../packages/database/db' // Adjust the import path as necessary
+// Endpoint to handle paper uploads with multipart form data
+import { defineEventHandler, readMultipartFormData, createError } from "h3"
+import { promises as fs } from "fs"
+import { join } from "path"
+import * as os from "os"
+import { paperInsert } from "../../../packages/database/db"
+import { getArxivMetadata, paperDownloadArxivId } from "~~/packages/retriever/arxivUtils"
+import { extractReferences, parseLatexToMarkdown } from "~~/packages/latexParser/latexUtils"
+import { extractReferencesFromFile, extractTextFromPdf, getPaperInfo } from "~~/packages/ollama/ollamaUtils"
 
 export default defineEventHandler(async (event) => {
-    const body = await readBody(event)
+  try {
+    // Read multipart form data
+    const formData = await readMultipartFormData(event)
+    if (!formData) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "No form data provided",
+      })
+    }
 
-    // Basic validation for required fields
-    if (!body || !body.filePath || !body.title || !body.authors) {
-        throw createError({
+    // Extract the authors, title, and file from formData
+    let authors = ""
+    let title = ""
+    let filePath = ""
+    let fileName = ""
+    let fileBuffer: Buffer | null = null
+
+    for (const part of formData) {
+      if (part.name === "authors" && part.data) {
+        authors = part.data.toString()
+      } else if (part.name === "title" && part.data) {
+        title = part.data.toString()
+      } else if (part.name === "file" && part.filename && part.data) {
+        fileName = part.filename
+        fileBuffer = part.data
+
+        if (!fileName.toLowerCase().endsWith(".pdf")) {
+          throw createError({
             statusCode: 400,
-            statusMessage: 'Missing required fields: filePath, title, and authors are required.',
-        });
-    }
-
-    const {
-        filePath,
-        title,
-        authors,
-        abstract,
-        paperUrl,
-        published,
-        updated,
-        markdownContent,
-        processReferences = true, // Default to true if not provided
-    } = body;
-
-    try {
-        const paperId = await paperInsert(
-            filePath,
-            title,
-            authors,
-            abstract,
-            paperUrl,
-            published,
-            updated,
-            markdownContent,
-            processReferences,
-        );
-
-        // Set status code to 201 (Created)
-        event.node.res.statusCode = 201;
-
-        return {
-            success: true,
-            message: 'Paper created successfully.',
-            paperId: paperId,
+            statusMessage: "Only PDF files are allowed",
+          })
         }
-    } catch (error: any) {
-        console.error(`Error creating paper:`, error);
-        // Handle potential errors, e.g., file not found at filePath, database errors
-        throw createError({
-            statusCode: 500,
-            statusMessage: `Failed to create paper: ${error.message || 'Unknown error'}`,
-        });
+      }
     }
+
+    // Validate that a file was provided
+    if (!fileBuffer || !fileName) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "No file provided or invalid file",
+      })
+    }
+
+    // Create a temporary file
+    const tempDir = os.tmpdir()
+    filePath = join(tempDir, fileName)
+    await fs.writeFile(filePath, fileBuffer)
+
+    console.log(`Saved uploaded file temporarily to ${filePath}`)
+    console.log(`Title: ${title || "Not provided"}, Authors: ${authors || "Not provided"}`)
+
+    let arxivPaperId = ""
+    let abstract = ""
+    let paperUrl = ""
+    let published = ""
+    let updated = ""
+    let markdownContent = ""
+    let references: Record<string, any>[] = []
+    let processReferences = true
+
+    const arxivPaperMetadata = await getArxivMetadata(filePath)
+    if (arxivPaperMetadata?.arxiv_id) {
+      arxivPaperId = arxivPaperMetadata.arxiv_id || ""
+      title = arxivPaperMetadata.title || title
+      authors = arxivPaperMetadata.authors || authors
+      abstract = arxivPaperMetadata.abstract || ""
+      paperUrl = arxivPaperMetadata.url || ""
+      published = arxivPaperMetadata.published_date || ""
+      updated = arxivPaperMetadata.updated_date || ""
+
+      // create a temporary directory for the paper source
+      const tempDir = os.tmpdir()
+
+      paperDownloadArxivId(arxivPaperId, tempDir)
+      let sourceDir = join(tempDir, arxivPaperId.replace(".", ""))
+
+      // if source dir doesn't exist, use temp_dir as source dir and log error
+      try {
+        await fs.access(sourceDir)
+      } catch (error) {
+        console.error(`Source directory ${sourceDir} does not exist. Using temp_dir as source dir.`)
+        sourceDir = tempDir
+      }
+
+      try {
+        markdownContent = await parseLatexToMarkdown(sourceDir)
+        console.info(`Parsed LaTeX to Markdown successfully`)
+      } catch (error) {
+        console.error(`Failed to parse LaTeX to Markdown: ${error}`)
+        markdownContent = ""
+      }
+
+      console.info("Extracting references from source directory")
+      references = await extractReferences(sourceDir)
+      console.info(`Extracted ${references.length} references`)
+    } else {
+      console.info("No arXiv ID found in the uploaded paper")
+      const paperInfo = await getPaperInfo(filePath)
+      if (paperInfo) {
+        title = paperInfo.title || title
+        authors = paperInfo.authors || authors
+        abstract = paperInfo.abstract || ""
+      }
+
+      // TODO Not markdown atm I guess?
+      markdownContent = await extractTextFromPdf(filePath)
+      console.info(`Extracted text from PDF successfully`)
+    }
+
+    //! TODO Not working atm
+    if (references.length <= 0) {
+      console.info("Skipping reference processing")
+      processReferences = false
+      // references = await extractReferencesFromFile(filePath)
+      // console.info(`Extracted ${references.length} references from file`)
+    }
+    // Insert the paper into the database
+    // The paperInsert function handles cases where title or authors are empty
+    const paperId = await paperInsert(
+      filePath,
+      title,
+      authors,
+      abstract, 
+      paperUrl, 
+      published, 
+      updated, 
+      markdownContent, 
+      processReferences, 
+    )
+
+    // Clean up the temporary file
+    try {
+      await fs.unlink(filePath)
+      console.log(`Temporary file ${filePath} has been deleted`)
+    } catch (unlinkError) {
+      console.error(`Failed to delete temporary file ${filePath}:`, unlinkError)
+    }
+
+    return {
+      success: true,
+      paperId,
+      message: "Paper uploaded successfully",
+    }
+  } catch (error: any) {
+    console.error("Error handling paper upload:", error)
+
+    // Handle specific error types if needed
+    if (error.statusCode) {
+      throw error // Pass through H3 errors with status codes
+    }
+
+    throw createError({
+      statusCode: 500,
+      statusMessage: `Failed to upload paper: ${error.message || "Unknown error"}`,
+    })
+  }
 })

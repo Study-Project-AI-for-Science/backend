@@ -6,7 +6,6 @@
 // import { useDrizzle } from "../utils/drizzle"
 // import { createError } from "h3"
 
-
 // const bodySchema = z.object({
 //   email: z.string().email(),
 //   password: z.string().min(8).max(256),
@@ -48,4 +47,3 @@
 // function defineEventHandler(arg0: (event: any) => Promise<any>) {
 //   throw new Error("Function not implemented.")
 // }
-

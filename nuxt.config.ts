@@ -1,7 +1,7 @@
 import tailwindcss from "@tailwindcss/vite"
-import { resolve } from 'path'
+import { resolve } from "path"
 
-const rootDir = resolve(__dirname, '..') // Go up one level from backend
+const rootDir = resolve(__dirname, "..") // Go up one level from backend
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({

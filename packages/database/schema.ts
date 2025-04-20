@@ -1,4 +1,4 @@
-import { integer, jsonb, pgTable, text, timestamp, vector  } from "drizzle-orm/pg-core"
+import { integer, jsonb, pgTable, text, timestamp, vector } from "drizzle-orm/pg-core"
 import { uuidv7 } from "uuidv7"
 
 export const papers = pgTable("papers", {
@@ -17,7 +17,9 @@ export const papers = pgTable("papers", {
 
 export const paperEmbeddings = pgTable("paper_embeddings", {
   id: text().primaryKey().$defaultFn(uuidv7),
-  paperId: text().notNull().references(() => papers.id),
+  paperId: text()
+    .notNull()
+    .references(() => papers.id),
   embedding: vector("embedding", { dimensions: 1024 }).notNull(),
   modelName: text().notNull(),
   modelVersion: text().notNull(),
@@ -30,11 +32,12 @@ export const paperReferences = pgTable("paper_references", {
   title: text().notNull(),
   authors: text().notNull(),
   fields: jsonb().notNull(),
-  paperId: text().notNull().references(() => papers.id),
+  paperId: text()
+    .notNull()
+    .references(() => papers.id),
   referencePaperId: text().references(() => papers.id),
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 })
-
 
 export const users = pgTable("users", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),

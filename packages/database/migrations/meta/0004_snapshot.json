@@ -57,13 +57,9 @@
         "paper_embeddings_paper_id_papers_id_fk": {
           "name": "paper_embeddings_paper_id_papers_id_fk",
           "tableFrom": "paper_embeddings",
-          "columnsFrom": [
-            "paper_id"
-          ],
+          "columnsFrom": ["paper_id"],
           "tableTo": "papers",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
@@ -72,9 +68,7 @@
       "uniqueConstraints": {
         "paper_embeddings_embeddingHash_unique": {
           "name": "paper_embeddings_embeddingHash_unique",
-          "columns": [
-            "embedding_hash"
-          ],
+          "columns": ["embedding_hash"],
           "nullsNotDistinct": false
         }
       },
@@ -135,26 +129,18 @@
         "paper_references_paper_id_papers_id_fk": {
           "name": "paper_references_paper_id_papers_id_fk",
           "tableFrom": "paper_references",
-          "columnsFrom": [
-            "paper_id"
-          ],
+          "columnsFrom": ["paper_id"],
           "tableTo": "papers",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         },
         "paper_references_reference_paper_id_papers_id_fk": {
           "name": "paper_references_reference_paper_id_papers_id_fk",
           "tableFrom": "paper_references",
-          "columnsFrom": [
-            "reference_paper_id"
-          ],
+          "columnsFrom": ["reference_paper_id"],
           "tableTo": "papers",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
@@ -243,9 +229,7 @@
       "uniqueConstraints": {
         "papers_fileHash_unique": {
           "name": "papers_fileHash_unique",
-          "columns": [
-            "file_hash"
-          ],
+          "columns": ["file_hash"],
           "nullsNotDistinct": false
         }
       },

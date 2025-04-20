@@ -38,28 +38,28 @@ const s3Client = new S3Client(s3Config)
  * @returns The URL of the uploaded file.
  */
 export async function uploadFile(filePath: string): Promise<string> {
-    const fileStream = fs.createReadStream(filePath)
-    const fileId = uuidv7() // Generate a UUID v7 for the file ID
-    const fileName = path.basename(filePath) // Extract the original filename
-    const key = `${fileId}/${fileName}` // Construct the object key as fileId/fileName
+  const fileStream = fs.createReadStream(filePath)
+  const fileId = uuidv7() // Generate a UUID v7 for the file ID
+  const fileName = path.basename(filePath) // Extract the original filename
+  const key = `${fileId}/${fileName}` // Construct the object key as fileId/fileName
 
-    const uploadParams = {
-        Bucket: bucketName,
-        Key: key, // Use the new composite key
-        Body: fileStream,
-    }
+  const uploadParams = {
+    Bucket: bucketName,
+    Key: key, // Use the new composite key
+    Body: fileStream,
+  }
 
-    try {
-        await s3Client.send(new PutObjectCommand(uploadParams))
-        // Construct the URL manually. Ensure MinIO is configured for public access if needed.
-        const baseUrl = endpoint.endsWith("/") ? endpoint.slice(0, -1) : endpoint
-        const fileUrl = `${baseUrl}/${bucketName}/${key}` // Use the new key in the URL
-        console.log(`File uploaded successfully. ${fileUrl}`)
-        return fileUrl
-    } catch (err) {
-        console.error("Error uploading file:", err)
-        throw err
-    }
+  try {
+    await s3Client.send(new PutObjectCommand(uploadParams))
+    // Construct the URL manually. Ensure MinIO is configured for public access if needed.
+    const baseUrl = endpoint.endsWith("/") ? endpoint.slice(0, -1) : endpoint
+    const fileUrl = `${baseUrl}/${bucketName}/${key}` // Use the new key in the URL
+    console.log(`File uploaded successfully. ${fileUrl}`)
+    return fileUrl
+  } catch (err) {
+    console.error("Error uploading file:", err)
+    throw err
+  }
 }
 
 /**

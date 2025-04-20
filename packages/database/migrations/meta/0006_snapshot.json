@@ -58,12 +58,8 @@
           "name": "paper_embeddings_paper_id_papers_id_fk",
           "tableFrom": "paper_embeddings",
           "tableTo": "papers",
-          "columnsFrom": [
-            "paper_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["paper_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -73,9 +69,7 @@
         "paper_embeddings_embeddingHash_unique": {
           "name": "paper_embeddings_embeddingHash_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "embedding_hash"
-          ]
+          "columns": ["embedding_hash"]
         }
       },
       "policies": {},
@@ -136,12 +130,8 @@
           "name": "paper_references_paper_id_papers_id_fk",
           "tableFrom": "paper_references",
           "tableTo": "papers",
-          "columnsFrom": [
-            "paper_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["paper_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -149,12 +139,8 @@
           "name": "paper_references_reference_paper_id_papers_id_fk",
           "tableFrom": "paper_references",
           "tableTo": "papers",
-          "columnsFrom": [
-            "reference_paper_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["reference_paper_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -244,9 +230,7 @@
         "papers_fileHash_unique": {
           "name": "papers_fileHash_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "file_hash"
-          ]
+          "columns": ["file_hash"]
         }
       },
       "policies": {},
@@ -283,12 +267,8 @@
           "name": "sessions_user_id_users_id_fk",
           "tableFrom": "sessions",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -353,9 +333,7 @@
         "users_email_unique": {
           "name": "users_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         }
       },
       "policies": {},
