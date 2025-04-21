@@ -8,12 +8,15 @@ To spin up the database for local testing/development follow the following steps
     - fastest way for mac and linux is: `curl -LsSf https://astral.sh/uv/install.sh | sh`
     - for Windows: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
 3. Install pandoc in a way that works for you (on Mac typically using brew)
-4. For Mac/Linux: run `chmod +x ./scripts/setup.sh && ./scripts/setup.sh`
-5. For Windows: run `bash ./scripts/setup.sh` (This works in PowerShell with Docker WSL integration enabled)
+4. Install [bun](https://bun.sh/docs/installation)
+5. Run `bun install`
+6. For Mac/Linux: run `chmod +x ./scripts/setup.sh && ./scripts/setup.sh`
+7. For Windows: run `bash ./scripts/setup.sh` (This works in PowerShell with Docker WSL integration enabled)
    
 <br>
 If you want to also insert a few sample files to the database as well as the s3 storage, you can insted replace step three with the following: <br>
 
+#### CURRENTLY NOT WORKING!
 1. For Max/Linux: run `chmod +x ./setup_with_samples.sh && ./setup_with_samples.sh`
 2. For Windows: run `bash ./setup_with_samples.sh` (This works in PowerShell with Docker WSL integration enabled)
 
@@ -28,13 +31,12 @@ Sometimes, maybe if something goes wrong, you want to test something, or for som
 3. Run one of the setup scripts and afterwards you are good to go again
 
 ### Start the backend
-1. install [uv](https://docs.astral.sh/uv/) (explanation down below)
-    - fastest way for mac and linux is: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-    - for Windows: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
-2. run `uv run run.py`
+1. Make sure the docker daemon is running
+2. Make sure a working .env file is created 
+3. Run `bun run setup`
 
 
-### How to use uv
+### How to use uv (Everything below this is currently outdated)
 
 We chose uv as our tool of choice because it’s lightweight, fast, and is a all in one tool for python projects and dependency management. It handles everything that needs to be taken care of in the background and this while being extremly fast. 
 
