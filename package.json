@@ -10,7 +10,9 @@
     "postinstall": "nuxt prepare",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "pretty": "prettier --write \"./**/*.{js,jsx,mjs,cjs,ts,tsx,json}\""
+    "pretty": "prettier --write \"./**/*.{js,jsx,mjs,cjs,ts,tsx,json}\"",
+    "setup:create-bucket": "node ./scripts/createBucket.ts",
+    "setup": "sh ./scripts/setup.sh"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.787.0",

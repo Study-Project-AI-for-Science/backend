@@ -380,6 +380,7 @@ cython_debug/
 
 # Docker volumes
 volumes/
+.old_volumes
 
 # Mac specific
 .DS_Store
