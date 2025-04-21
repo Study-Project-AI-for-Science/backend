@@ -169,6 +169,18 @@ export default defineEventHandler(async (event) => {
     try {
       await fs.unlink(filePath)
       console.log(`Temporary file ${filePath} has been deleted`)
+      // Also clean up the folder with the same path as filePath but without the .pdf extension
+      const folderPath = filePath.endsWith(".pdf") ? filePath.slice(0, -4) : filePath
+      try {
+        await fs.rm(folderPath, { recursive: true, force: true })
+        console.log(`Temporary folder ${folderPath} has been deleted`)
+      } catch (folderError) {
+        // It's ok if the folder doesn't exist
+        if (typeof folderError === "object" && folderError !== null && "code" in folderError && (folderError as any).code !== "ENOENT") {
+          console.error(`Failed to delete temporary folder ${folderPath}:`, folderError)
+        }
+      }
+      
     } catch (unlinkError) {
       console.error(`Failed to delete temporary file ${filePath}:`, unlinkError)
     }
