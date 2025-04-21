@@ -2,6 +2,7 @@ import argparse
 import json
 import sys
 import os
+import datetime
 
 # Add the grandparent directory (backend) to the Python path
 # to allow importing modules like modules.retriever.arxiv.arxiv_retriever
@@ -15,6 +16,12 @@ try:
 except ImportError as e:
     print(json.dumps({"error": f"Failed to import arxiv_retriever module: {e}"}), file=sys.stderr)
     sys.exit(1)
+
+
+def json_serial(obj):
+    if isinstance(obj, (datetime.datetime, datetime.date)):
+        return obj.isoformat()
+    raise TypeError(f"Type {type(obj)} not serializable")
 
 
 def main():
@@ -44,7 +51,7 @@ def main():
             result = arxiv_retriever.paper_get_metadata(args.file_path)
 
         # Print the result as JSON to stdout
-        print(json.dumps(result))
+        print(json.dumps(result, default=json_serial))
 
     except arxiv_retriever.ArxivPaperNotFoundError as e:
         print(json.dumps({"error": f"ArXiv paper not found: {e}", "type": "ArxivPaperNotFoundError"}), file=sys.stderr)

@@ -1,10 +1,10 @@
 import { spawn } from "child_process"
 import path from "path"
-import { fileURLToPath } from 'url'; // Import fileURLToPath
+import { fileURLToPath } from "url" // Import fileURLToPath
 
 // Get the directory name in ES module scope
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 // Determine the absolute path to the Python script
 // Assuming arxivUtils.ts is in backend/packages/retriever/

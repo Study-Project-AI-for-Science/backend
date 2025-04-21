@@ -114,7 +114,6 @@ export async function paperGetEmbeddings(paperId: string): Promise<Record<string
  * @param published The published date of the paper (optional).
  * @param updated The updated date of the paper (optional).
  * @param markdownContent The markdown content of the paper (optional).
- * @param processReferences Flag to indicate if references should be processed (default: true).
  * @returns A promise that resolves to the ID of the inserted paper.
  */
 export async function paperInsert(
@@ -126,7 +125,6 @@ export async function paperInsert(
   published?: string,
   updated?: string,
   markdownContent?: string, // Assuming this might be used for embedding or reference extraction later
-  processReferences: boolean = true,
 ): Promise<string> {
   try {
     // 1. Compute File Hash
@@ -152,31 +150,6 @@ export async function paperInsert(
     // Assuming storage(filePath) is the upload function returning the URL
     const storageUrl = await storage.uploadFile(filePath)
     console.log(`Uploaded ${filePath} to ${storageUrl}`)
-
-    if (!title || !authors) {
-      const info = await getPaperInfo(filePath)
-      title = title || info.title || "Untitled Paper"
-      authors = authors || info.authors || "Unknown Authors"
-      abstract = abstract || info.abstract || undefined
-    }
-
-    const arxivIds = await extractArxivIds(paperUrl || "")
-    let arxivId: string | undefined = undefined
-    if (arxivIds.length > 0) {
-      arxivId = arxivIds[0] // Use the first found ArXiv ID
-      console.log(`Found ArXiv ID: ${arxivId}`)
-      await paperDownloadArxivId(arxivId!, "/var/tmp/arxiv_papers")
-      const sourceDir = join("/var/tmp/arxiv_papers", arxivId!.replace(".", ""))
-      if (!markdownContent) {
-        markdownContent = await parseLatexToMarkdown(sourceDir)
-      }
-    } else {
-      console.log("No ArXiv ID found.")
-    }
-
-    if (!markdownContent) {
-      markdownContent = await extractTextFromPdf(filePath)
-    }
 
     // 3. Insert Paper Metadata into "papers" table
     const paperData = {
@@ -238,42 +211,7 @@ export async function paperInsert(
       throw embeddingError
     }
 
-    // 6. Handle References (Optional)
-    if (processReferences) {
-      console.log(`Processing references for paper ${paperId}...`)
-      if (arxivId) {
-        const sourceDir = join("/var/tmp/arxiv_papers", arxivId!.replace(".", ""))
-        const rawReferences: Record<string, any>[] = await extractReferences(sourceDir)
-
-        // Map the raw references to the ReferenceInput interface
-        const extractedReferences: ReferenceInput[] = rawReferences.map(
-          (rawRef): ReferenceInput => {
-            const mappedRef: ReferenceInput = {
-              // Spread rawRef to include all original fields first
-              ...rawRef,
-              // Explicitly map/override required fields, ensuring they are strings
-              id: String(rawRef.ID || rawRef.id),
-              title: String(rawRef.title || "Untitled Reference"), // Default title if none found
-              authors: String(rawRef.author || "Unknown Author(s)"), // Default author if none found
-              raw_bibtex: String(rawRef.raw || rawRef.raw_bibtex || ""), // Default empty string if none found
-            }
-            return mappedRef
-          },
-        )
-
-        if (extractedReferences && extractedReferences.length > 0) {
-          await paperReferencesInsertMany(paperId, extractedReferences)
-        }
-      } else {
-        const extractedReferences: ReferenceInput[] = await extractReferencesFromFile(filePath)
-        if (extractedReferences && extractedReferences.length > 0) {
-          await paperReferencesInsertMany(paperId, extractedReferences)
-        } else {
-          console.log(`No references found or extracted for paper ${paperId}.`)
-        }
-      }
-    }
-    // 7. Return Paper ID
+    // 6. Return Paper ID
     return paperId
   } catch (error) {
     console.error(`Error inserting paper ${filePath}:`, error)
@@ -504,7 +442,10 @@ export async function paperReferencesInsertMany(
   // Process each reference to find/insert ArXiv papers and get their IDs
   const valuesToInsertPromises = references.map(async (ref) => {
     // TODO: Consider a more robust temporary directory strategy
-    const referencedPaperId = await processReferenceWithArxivId(ref, "/tmp/ref_papers")
+
+    //! TODO: Needs to be reimplemented
+    //const referencedPaperId = await processReferenceWithArxivId(ref, "/tmp/ref_papers")
+    const referencedPaperId = "00000000-0000-7000-0000-000000000000"
 
     // Separate known fields from the rest to store in 'fields'
     const { id, type, title, authors, raw_bibtex, ...otherFields } = ref
@@ -653,7 +594,6 @@ export async function processReferenceWithArxivId(
       published,
       undefined, // updated
       undefined, // markdownContent - might be generated later
-      false, // withReferences - set to false to avoid immediate reference processing
       // Add arxivId to the insert function if the schema supports it directly
       // Or handle it via paperUpdate after insertion if needed
     )

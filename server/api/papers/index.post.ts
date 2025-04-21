@@ -3,10 +3,14 @@ import { defineEventHandler, readMultipartFormData, createError } from "h3"
 import { promises as fs } from "fs"
 import { join } from "path"
 import * as os from "os"
-import { paperInsert } from "../../../packages/database/db"
+import { paperInsert, paperReferencesInsertMany } from "../../../packages/database/db"
 import { getArxivMetadata, paperDownloadArxivId } from "~~/packages/retriever/arxivUtils"
 import { extractReferences, parseLatexToMarkdown } from "~~/packages/latexParser/latexUtils"
-import { extractReferencesFromFile, extractTextFromPdf, getPaperInfo } from "~~/packages/ollama/ollamaUtils"
+import {
+  extractReferencesFromFile,
+  extractTextFromPdf,
+  getPaperInfo,
+} from "~~/packages/ollama/ollamaUtils"
 
 export default defineEventHandler(async (event) => {
   try {
@@ -82,8 +86,9 @@ export default defineEventHandler(async (event) => {
       // create a temporary directory for the paper source
       const tempDir = os.tmpdir()
 
-      paperDownloadArxivId(arxivPaperId, tempDir)
-      let sourceDir = join(tempDir, arxivPaperId.replace(".", ""))
+      const paperPath = await paperDownloadArxivId(arxivPaperId, tempDir)
+      let sourceDir = paperPath.endsWith(".pdf") ? paperPath.slice(0, -4) : paperPath
+      // let sourceDir = join(tempDir, arxivPaperId.replace(".", ""))
 
       // if source dir doesn't exist, use temp_dir as source dir and log error
       try {
@@ -127,17 +132,38 @@ export default defineEventHandler(async (event) => {
     }
     // Insert the paper into the database
     // The paperInsert function handles cases where title or authors are empty
+    // TODO: Handle case where paper is found, but no references are found
     const paperId = await paperInsert(
       filePath,
       title,
       authors,
-      abstract, 
-      paperUrl, 
-      published, 
-      updated, 
-      markdownContent, 
-      processReferences, 
+      abstract,
+      paperUrl,
+      published,
+      updated,
+      markdownContent,
     )
+
+    if (references.length > 0) {
+      console.info("Inserting references into the database")
+      try {
+        // Map references to ReferenceInput type
+        const referenceInputs = references.map((ref) => ({
+          id: ref.id ?? "",
+          title: ref.title ?? "",
+          authors: ref.authors ?? "",
+          raw_bibtex: ref.raw_bibtex ?? "",
+          ...ref,
+        }))
+        await paperReferencesInsertMany(paperId, referenceInputs)
+      } catch (error) {
+        console.error("Error inserting references into the database:", error)
+        throw createError({
+          statusCode: 500,
+          statusMessage: "Failed to insert references into the database",
+        })
+      }
+    }
 
     // Clean up the temporary file
     try {
