@@ -8,7 +8,6 @@ tasks, and handling potential errors.
 
 import os
 import time
-import logging
 from typing import List, Optional, Dict
 import ollama
 import pymupdf
@@ -25,8 +24,8 @@ load_dotenv(override=True)
 
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# logging.basicConfig(level=logging.INFO)
+# logger = logging.getLogger(__name__)
 
 
 class TokenizerNotAvailableError(Exception):
@@ -42,8 +41,9 @@ class OllamaInitializationError(Exception):
 
 
 # --- Configuration ---
+# OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")  # Default to localhost if not specified
+# logger.info(f"OLLAMA_HOST is set to: {OLLAMA_HOST}")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")  # Default to localhost if not specified
-logger.info(f"OLLAMA_HOST is set to: {OLLAMA_HOST}")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1")
 OLLAMA_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "mxbai-embed-large")
 OLLAMA_USERNAME = os.getenv("OLLAMA_USERNAME", "")
@@ -65,22 +65,22 @@ def _initialize_module():
         TOKENIZER = AutoTokenizer.from_pretrained("mixedbread-ai/mxbai-embed-large-v1")
 
         # Initialize Ollama client and pull model
-        logger.info(f"Initializing Ollama client with host: {OLLAMA_HOST}")
+        # logger.info(f"Initializing Ollama client with host: {OLLAMA_HOST}")
         if OLLAMA_USERNAME and OLLAMA_PASSWORD:
             OLLAMA_CLIENT = ollama.Client(host=OLLAMA_HOST, auth=(OLLAMA_USERNAME, OLLAMA_PASSWORD))
-            logger.info("Connected to Ollama with authentication")
+            # logger.info("Connected to Ollama with authentication")
         else:
             OLLAMA_CLIENT = ollama.Client(host=OLLAMA_HOST)
-            logger.info("Connected to Ollama without authentication")
+            # logger.info("Connected to Ollama without authentication")
 
         OLLAMA_CLIENT.pull(OLLAMA_EMBEDDING_MODEL)
-        logger.info(f"Successfully pulled Ollama model: {OLLAMA_EMBEDDING_MODEL}")
+        # logger.info(f"Successfully pulled Ollama model: {OLLAMA_EMBEDDING_MODEL}")
 
         # Also pull the chat model
         OLLAMA_CLIENT.pull(OLLAMA_MODEL)
-        logger.info(f"Successfully pulled Ollama model: {OLLAMA_MODEL}")
+        # logger.info(f"Successfully pulled Ollama model: {OLLAMA_MODEL}")
     except Exception as e:
-        logger.error(f"Failed to initialize module: {e}")
+        # logger.error(f"Failed to initialize module: {e}")
         raise OllamaInitializationError(f"Failed to initialize Ollama: {e}") from e
 
 
@@ -89,7 +89,8 @@ if not os.getenv("PYTEST_RUNNING"):
     try:
         _initialize_module()
     except Exception as e:
-        logger.error(f"Module initialization failed: {e}")
+        # logger.error(f"Module initialization failed: {e}")
+        pass
 
 # --- Helper Functions ---
 
@@ -108,7 +109,7 @@ def _send_embed_request_to_ollama(input_text: str, model: str) -> Optional[List[
     """
     global OLLAMA_CLIENT
     if OLLAMA_CLIENT is None:
-        logger.error("Ollama client not initialized")
+        # logger.error("Ollama client not initialized")
         return None
 
     for attempt in range(OLLAMA_MAX_RETRIES):
@@ -118,10 +119,10 @@ def _send_embed_request_to_ollama(input_text: str, model: str) -> Optional[List[
                 raise ValueError(f"Invalid embedding response: {response}")
             return response["embedding"]
         except Exception as e:
-            logger.error(f"Ollama.embed request failed (attempt {attempt + 1}/{OLLAMA_MAX_RETRIES}): {e}")
+            # logger.error(f"Ollama.embed request failed (attempt {attempt + 1}/{OLLAMA_MAX_RETRIES}): {e}")
             if attempt < OLLAMA_MAX_RETRIES - 1:
                 time.sleep(OLLAMA_RETRY_DELAY)
-    logger.error(f"Ollama.embed request failed after {OLLAMA_MAX_RETRIES} attempts.")
+    # logger.error(f"Ollama.embed request failed after {OLLAMA_MAX_RETRIES} attempts.")
     return None
 
 
@@ -142,7 +143,7 @@ def get_paper_embeddings(pdf_path: str) -> Dict[str, List[List[float]]]:
     try:
         text_content = extract_pdf_content(pdf_path)  # extracts & splits content into chunks
         if not text_content:
-            logger.warning(f"No text extracted from PDF: {pdf_path}")
+            # logger.warning(f"No text extracted from PDF: {pdf_path}")
             return {"embeddings": [], "model_name": OLLAMA_EMBEDDING_MODEL, "model_version": "1.0"}
 
         # Get embeddings for each segment
@@ -152,7 +153,8 @@ def get_paper_embeddings(pdf_path: str) -> Dict[str, List[List[float]]]:
             if embedding:
                 embeddings.append(embedding)
             else:
-                logger.warning(f"Failed to get embedding for segment in {pdf_path}")
+                # logger.warning(f"Failed to get embedding for segment in {pdf_path}")
+                pass
 
         return {"embeddings": embeddings, "model_name": OLLAMA_EMBEDDING_MODEL, "model_version": "1.0"}
 
@@ -161,7 +163,7 @@ def get_paper_embeddings(pdf_path: str) -> Dict[str, List[List[float]]]:
     except TokenizerNotAvailableError:
         raise
     except Exception as e:
-        logger.error(f"Error in get_paper_embeddings: {e}")
+        # logger.error(f"Error in get_paper_embeddings: {e}")
         raise
 
 
@@ -170,7 +172,7 @@ def get_query_embeddings(query_string: str) -> Optional[List[float]]:
     Gets the embeddings for a given query string.
     """
     if not query_string.strip():
-        logger.error("Query string cannot be empty.")
+        # logger.error("Query string cannot be empty.")
         raise ValueError("Query string cannot be empty.")
 
     embeddings = _send_embed_request_to_ollama(query_string, model=OLLAMA_EMBEDDING_MODEL)
@@ -258,5 +260,5 @@ def get_paper_info(file_path: str) -> dict:  #!TODO: Need to implement this func
 
         return resp.model_dump()
     except Exception as e:
-        logger.error(f"Error generating paper info for {file_path}: {e}")
+        # logger.error(f"Error generating paper info for {file_path}: {e}")
         raise e

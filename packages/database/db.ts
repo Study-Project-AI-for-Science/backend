@@ -189,26 +189,48 @@ export async function paperInsert(
       const modelVersion = embeddingInfo.model_version || undefined
 
       // Prepare data for bulk insertion
-      const embeddingsToInsert = embeddingsList.map((embedding: number[]) => ({
-        paperId: paperId,
-        embedding: embedding,
-        modelName: modelName || "",
-        modelVersion: modelVersion || "",
-      }))
+      const seen = new Set<string>();
+      const embeddingsToInsert = embeddingsList
+        // Exclude empty embeddings or embeddings with all zero values
+        .filter(embedding => Array.isArray(embedding) && embedding.length > 0 && embedding.some(val => val !== 0))
+        // Remove duplicate embeddings
+        .filter(embedding => {
+          const key = JSON.stringify(embedding);
+          if (seen.has(key)) {
+            return false;
+          }
+          seen.add(key);
+          return true;
+        })
+        .map((embedding: number[]) => ({
+          paperId: paperId,
+          embedding: embedding,
+          modelName: modelName || "",
+          modelVersion: modelVersion || "",
+        }))
 
       // 5. Insert Embeddings into "paper_embeddings" table
       if (embeddingsToInsert.length > 0) {
-        await useDrizzle().insert(paperEmbeddings).values(embeddingsToInsert)
-        console.log(`Inserted ${embeddingsToInsert.length} embeddings for paper ID: ${paperId}`)
+        try {
+          await useDrizzle().insert(paperEmbeddings).values(embeddingsToInsert)
+          console.log(`Inserted ${embeddingsToInsert.length} embeddings for paper ID: ${paperId}`)
+        } catch (dbError: any) {
+          // Check if this is a unique constraint violation error and ignore it
+          if (dbError.message && dbError.message.includes('unique constraint "paper_embeddings_unique_combination"')) {
+            console.warn(`Embeddings already exist for paper ID: ${paperId}, skipping insertion`)
+          } else {
+            // Re-throw if it's not the specific error we want to ignore
+            throw dbError
+          }
+        }
       } else {
         console.warn(`No embeddings generated or found for paper ID: ${paperId}`)
       }
-      console.log(`Inserted embedding for paper ID: ${paperId}`)
+      console.log(`Embeddings processed for paper ID: ${paperId}`)
     } catch (embeddingError) {
       console.error(`Failed to generate or insert embedding for paper ${paperId}:`, embeddingError)
-      // Decide if this error is critical. Maybe log and continue?
-      // For now, we'll let the main try/catch handle it.
-      throw embeddingError
+      // Decided this error is not critical - log and continue without throwing
+      // We'll just return the paper ID even if embeddings failed
     }
 
     // 6. Return Paper ID
@@ -445,7 +467,8 @@ export async function paperReferencesInsertMany(
 
     //! TODO: Needs to be reimplemented
     //const referencedPaperId = await processReferenceWithArxivId(ref, "/tmp/ref_papers")
-    const referencedPaperId = "00000000-0000-7000-0000-000000000000"
+    // Set referencePaperId to null instead of a non-existent ID
+    const referencedPaperId = null
 
     // Separate known fields from the rest to store in 'fields'
     const { id, type, title, authors, raw_bibtex, ...otherFields } = ref
