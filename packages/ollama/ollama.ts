@@ -226,7 +226,7 @@ export async function extractTextFromPdf(pdfPath: string): Promise<string> {
  * @param inputText Text to embed
  * @returns Embedding vector or null if failed
  */
-export async function sendEmbedRequest(inputText: string): Promise<number[] | null> {
+export async function endEmbedRequest(inputText: string): Promise<number[] | null> {
   for (let attempt = 0; attempt < OLLAMA_MAX_RETRIES; attempt++) {
     try {
       const response = await embeddingModel.embed(inputText)

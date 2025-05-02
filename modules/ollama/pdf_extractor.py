@@ -1,6 +1,5 @@
 from unstructured.partition.pdf import partition_pdf
 
-
 def extract_pdf_content(pdf_path, max_context_length=512):
     """
     Extracts structured content (titles + associated elements) from a PDF file.

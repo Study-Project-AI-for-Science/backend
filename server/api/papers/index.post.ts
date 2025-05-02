@@ -1,16 +1,11 @@
 // Endpoint to handle paper uploads with multipart form data
-import { defineEventHandler, readMultipartFormData, createError } from "h3"
-import { promises as fs } from "fs"
-import { join } from "path"
-import * as os from "os"
 import { paperInsert, paperReferencesInsertMany } from "../../../packages/database/db"
 import { getArxivMetadata, paperDownloadArxivId } from "~~/packages/retriever/arxivUtils"
 import { extractReferences, parseLatexToMarkdown } from "~~/packages/latexParser/latexUtils"
-import {
-  extractReferencesFromFile,
-  extractTextFromPdf,
-  getPaperInfo,
-} from "~~/packages/ollama/ollamaUtils"
+import { extractTextFromPdf, getPaperInfo } from "~~/packages/ollama/ollamaUtils"
+import { promises as fs } from "fs"
+import { join } from "path"
+import * as os from "os"
 
 export default defineEventHandler(async (event) => {
   try {

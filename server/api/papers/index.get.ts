@@ -14,22 +14,20 @@ export default defineEventHandler(async (event) => {
 
   const offset = (page - 1) * pageSize
 
-  const paperQuery = await useDrizzle()
+  const paperResults = await useDrizzle()
     .select()
     .from(papers)
     .offset(offset)
     .orderBy(desc(papers.createdAt))
     .limit(pageSize)
 
-  const totalQuery = await useDrizzle()
+  const [total] = await useDrizzle()
     .select({ count: count(papers.id) })
     .from(papers)
-
-  // Fetch simultaneously
-  const [retrievedPapers, [total]] = await Promise.all([paperQuery, totalQuery])
+  if (!total) throw createError({ statusCode: 500, statusMessage: "Failed to get total count" })
 
   return {
-    papers: retrievedPapers,
+    papers: paperResults,
     total: total?.count || 0,
   }
 })

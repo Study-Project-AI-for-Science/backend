@@ -11,4 +11,5 @@ export default defineEventHandler(async (event) => {
 
   const [paper] = await useDrizzle().select().from(papers).where(eq(papers.id, id)).limit(1)
   if (!paper) throw createError({ statusCode: 404, statusMessage: "Paper not found" })
+  return paper
 })
