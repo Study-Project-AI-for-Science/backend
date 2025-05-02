@@ -1,50 +1,35 @@
-import { defineEventHandler, getQuery, createError } from "h3"
-import { paperListPaginated } from "../../../packages/database/db" // Adjust the import path as necessary
+import { papers } from "~~/packages/database/schema"
+import { count, desc } from "drizzle-orm"
+import { z } from "zod"
 
 // TODO need to implement the query string and then get the closest vectors/papers to that query
 
+const querySchema = z.object({
+  page: z.coerce.number().min(1).optional().default(1),
+  pageSize: z.coerce.number().min(1).max(1000).optional().default(10),
+})
+
 export default defineEventHandler(async (event) => {
-  const query = getQuery(event)
+  const { page, pageSize } = await readValidatedBody(event, querySchema.parse)
 
-  // Default values for pagination
-  let page = 1
-  let pageSize = 10
+  const offset = (page - 1) * pageSize
 
-  // Parse and validate page number
-  if (query.page) {
-    const parsedPage = parseInt(query.page as string, 10)
-    if (!isNaN(parsedPage) && parsedPage > 0) {
-      page = parsedPage
-    } else {
-      throw createError({
-        statusCode: 400,
-        statusMessage: "Invalid page number. Page must be a positive integer.",
-      })
-    }
-  }
+  const paperQuery = await useDrizzle()
+    .select()
+    .from(papers)
+    .offset(offset)
+    .orderBy(desc(papers.createdAt))
+    .limit(pageSize)
 
-  // Parse and validate page size
-  if (query.pageSize) {
-    const parsedPageSize = parseInt(query.pageSize as string, 10)
-    // Add reasonable limits for pageSize if needed, e.g., max 100
-    if (!isNaN(parsedPageSize) && parsedPageSize > 0) {
-      pageSize = parsedPageSize
-    } else {
-      throw createError({
-        statusCode: 400,
-        statusMessage: "Invalid page size. Page size must be a positive integer.",
-      })
-    }
-  }
+  const totalQuery = await useDrizzle()
+    .select({ count: count(papers.id) })
+    .from(papers)
 
-  try {
-    const result = await paperListPaginated(page, pageSize)
-    return result // Contains { papers: [], total: number }
-  } catch (error: any) {
-    console.error(`Error fetching paginated papers (page: ${page}, pageSize: ${pageSize}):`, error)
-    throw createError({
-      statusCode: 500,
-      statusMessage: `Failed to fetch papers: ${error.message || "Unknown error"}`,
-    })
+  // Fetch simultaneously
+  const [retrievedPapers, [total]] = await Promise.all([paperQuery, totalQuery])
+
+  return {
+    papers: retrievedPapers,
+    total: total?.count || 0,
   }
 })

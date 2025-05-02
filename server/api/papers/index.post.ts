@@ -176,11 +176,15 @@ export default defineEventHandler(async (event) => {
         console.log(`Temporary folder ${folderPath} has been deleted`)
       } catch (folderError) {
         // It's ok if the folder doesn't exist
-        if (typeof folderError === "object" && folderError !== null && "code" in folderError && (folderError as any).code !== "ENOENT") {
+        if (
+          typeof folderError === "object" &&
+          folderError !== null &&
+          "code" in folderError &&
+          (folderError as any).code !== "ENOENT"
+        ) {
           console.error(`Failed to delete temporary folder ${folderPath}:`, folderError)
         }
       }
-      
     } catch (unlinkError) {
       console.error(`Failed to delete temporary file ${filePath}:`, unlinkError)
     }

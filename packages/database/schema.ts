@@ -1,6 +1,32 @@
 import { integer, jsonb, pgTable, text, timestamp, vector } from "drizzle-orm/pg-core"
 import { uuidv7 } from "uuidv7"
 
+// Helpers
+
+const timestamps = {
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  deletedAt: timestamp({ withTimezone: true }),
+}
+
+// Tables
+
+export const users = pgTable("users", {
+  id: text().primaryKey().$defaultFn(uuidv7),
+  name: text().notNull(),
+  email: text().notNull().unique(),
+  password: text().notNull(),
+  ...timestamps,
+})
+
+export const sessions = pgTable("sessions", {
+  token: text().primaryKey().notNull(),
+  userId: integer()
+    .notNull()
+    .references(() => users.id),
+  ...timestamps,
+})
+
 export const papers = pgTable("papers", {
   id: text().primaryKey().$defaultFn(uuidv7),
   title: text().notNull(),
@@ -11,8 +37,7 @@ export const papers = pgTable("papers", {
   onlineUrl: text(),
   content: text(),
   publishedDate: timestamp({ withTimezone: true }),
-  updatedDate: timestamp({ withTimezone: true }),
-  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  ...timestamps,
 })
 
 export const paperEmbeddings = pgTable("paper_embeddings", {
@@ -24,7 +49,7 @@ export const paperEmbeddings = pgTable("paper_embeddings", {
   modelName: text().notNull(),
   modelVersion: text().notNull(),
   embeddingHash: text().unique(),
-  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  ...timestamps,
 })
 
 export const paperReferences = pgTable("paper_references", {
@@ -36,21 +61,5 @@ export const paperReferences = pgTable("paper_references", {
     .notNull()
     .references(() => papers.id),
   referencePaperId: text().references(() => papers.id),
-  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-})
-
-export const users = pgTable("users", {
-  id: integer().primaryKey().generatedAlwaysAsIdentity(),
-  name: text().notNull(),
-  email: text().notNull().unique(),
-  password: text().notNull(),
-  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-})
-
-export const sessions = pgTable("sessions", {
-  token: text().primaryKey().notNull(),
-  userId: integer()
-    .notNull()
-    .references(() => users.id),
-  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  ...timestamps,
 })

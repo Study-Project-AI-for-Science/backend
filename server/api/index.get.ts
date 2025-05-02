@@ -1,6 +1,3 @@
-import { defineEventHandler, setResponseStatus } from "h3"
-
-export default defineEventHandler((event) => {
-  setResponseStatus(event, 200)
+export default defineEventHandler(() => {
   return { status: "ok" }
 })

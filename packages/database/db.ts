@@ -3,17 +3,9 @@ import { createReadStream } from "fs"
 import { papers, paperEmbeddings, paperReferences } from "./schema"
 import { eq, desc, count, like, sql, gt, cosineDistance } from "drizzle-orm"
 import { extractArxivIds, paperDownloadArxivId } from "../retriever/arxivUtils"
-import { join } from "path"
-import * as storage from "../storage/storage"
-import {
-  generateEmbedding,
-  getPaperInfo,
-  getPaperEmbeddings,
-  extractTextFromPdf,
-  extractReferencesFromFile,
-} from "../ollama/ollamaUtils" // Assuming an embedding generation function exists
-import { parseLatexToMarkdown, extractReferences } from "../latexParser/latexUtils"
+import { generateEmbedding, getPaperEmbeddings } from "../ollama/ollamaUtils" // Assuming an embedding generation function exists
 import { useDrizzle } from "../../server/utils/drizzle"
+import * as storage from "../storage/storage"
 
 // Define the input type for a reference based on the example
 export interface ReferenceInput {
@@ -189,18 +181,21 @@ export async function paperInsert(
       const modelVersion = embeddingInfo.model_version || undefined
 
       // Prepare data for bulk insertion
-      const seen = new Set<string>();
+      const seen = new Set<string>()
       const embeddingsToInsert = embeddingsList
         // Exclude empty embeddings or embeddings with all zero values
-        .filter(embedding => Array.isArray(embedding) && embedding.length > 0 && embedding.some(val => val !== 0))
+        .filter(
+          (embedding) =>
+            Array.isArray(embedding) && embedding.length > 0 && embedding.some((val) => val !== 0),
+        )
         // Remove duplicate embeddings
-        .filter(embedding => {
-          const key = JSON.stringify(embedding);
+        .filter((embedding) => {
+          const key = JSON.stringify(embedding)
           if (seen.has(key)) {
-            return false;
+            return false
           }
-          seen.add(key);
-          return true;
+          seen.add(key)
+          return true
         })
         .map((embedding: number[]) => ({
           paperId: paperId,
@@ -216,7 +211,10 @@ export async function paperInsert(
           console.log(`Inserted ${embeddingsToInsert.length} embeddings for paper ID: ${paperId}`)
         } catch (dbError: any) {
           // Check if this is a unique constraint violation error and ignore it
-          if (dbError.message && dbError.message.includes('unique constraint "paper_embeddings_unique_combination"')) {
+          if (
+            dbError.message &&
+            dbError.message.includes('unique constraint "paper_embeddings_unique_combination"')
+          ) {
             console.warn(`Embeddings already exist for paper ID: ${paperId}, skipping insertion`)
           } else {
             // Re-throw if it's not the specific error we want to ignore
