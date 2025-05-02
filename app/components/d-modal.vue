@@ -43,9 +43,16 @@ onKeyDown("Escape", () => emit("close"))
         <div class="flex min-h-full items-center justify-center p-4 text-center">
           <div class="max-h-full w-full max-w-md">
             <div ref="dialog" class="relative rounded-md bg-white shadow">
-              <div class="flex items-center justify-between rounded-t border-b border-gray-200 px-4 py-2.5">
+              <div
+                class="flex items-center justify-between rounded-t border-b border-gray-200 px-4 py-2.5"
+              >
                 <h3 class="text-base font-medium text-gray-900">{{ titel }}</h3>
-                <DButton :icon-left="XIcon" variant="secondary" class="!px-1" @click="close"></DButton>
+                <DButton
+                  :icon-left="XIcon"
+                  variant="secondary"
+                  class="!px-1"
+                  @click="close"
+                ></DButton>
               </div>
               <div class="items-start space-y-6 overflow-auto text-left">
                 <slot></slot>

@@ -76,13 +76,19 @@ useIntervalFn(async () => {
       </template>
     </DHeader>
     <DPageContent>
-      <div v-if="papers.length > 0" class="grid gap-2.5 p-2" :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, 200px), 1fr))` }">
+      <div
+        v-if="papers.length > 0"
+        class="grid gap-2.5 p-2"
+        :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, 200px), 1fr))` }"
+      >
         <NuxtLink
           v-for="paper in papers"
           :to="`/papers/${paper.id}`"
           class="h-[274px] cursor-pointer rounded-md border border-gray-200 p-4 transition-all hover:shadow"
         >
-          <div class="mb-2 line-clamp-2 overflow-hidden text-sm font-medium overflow-ellipsis text-gray-900">
+          <div
+            class="mb-2 line-clamp-2 overflow-hidden text-sm font-medium overflow-ellipsis text-gray-900"
+          >
             {{ paper.title }}
           </div>
           <div class="line-clamp-12 overflow-hidden text-xs overflow-ellipsis text-gray-500">
@@ -91,7 +97,9 @@ useIntervalFn(async () => {
         </NuxtLink>
       </div>
       <div v-else class="h-full">
-        <div class="flex h-full w-full flex-col items-center justify-center gap-2 p-4 text-center text-sm text-gray-500">
+        <div
+          class="flex h-full w-full flex-col items-center justify-center gap-2 p-4 text-center text-sm text-gray-500"
+        >
           <div class="flex flex-col items-center">
             <div class="mb-4 rounded-md bg-gray-100 p-2">
               <RabbitIcon class="h-12 w-12 stroke-[1.5px] text-gray-500" />

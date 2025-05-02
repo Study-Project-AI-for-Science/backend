@@ -34,4 +34,3 @@ services:
       - "11434:11434"
     volumes:
       - ./volumes/ollama:/root/.ollama
-

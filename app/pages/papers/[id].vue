@@ -9,7 +9,9 @@ const paperId = route.params.id
 const config = useRuntimeConfig()
 
 const { data: paper, refresh } = await useFetch(`${config.public.apiBase}/papers/${paperId}`)
-const { data: references, refresh: refreshReferences } = await useFetch(`${config.public.apiBase}/papers/${paperId}/references`)
+const { data: references, refresh: refreshReferences } = await useFetch(
+  `${config.public.apiBase}/papers/${paperId}/references`,
+)
 
 function markdownToHtml(markdown: string) {
   if (!markdown) return ""
@@ -68,7 +70,10 @@ useIntervalFn(async () => {
           <h2 class="mb-2 text-xl font-semibold">References</h2>
           <!-- <pre>{{ references }}</pre> -->
           <div class="flex flex-col gap-2">
-            <div v-for="reference in references" class="flex flex-col gap-2 rounded-md bg-gray-100 p-2">
+            <div
+              v-for="reference in references"
+              class="flex flex-col gap-2 rounded-md bg-gray-100 p-2"
+            >
               <div class="font-semibold">{{ reference.title }}</div>
               <div>{{ reference.authors }}</div>
             </div>
@@ -76,7 +81,9 @@ useIntervalFn(async () => {
         </div>
         <div v-if="false" class="flex flex-col">
           <div class="flex-1">
-            <div class="flex h-full w-full flex-col items-center justify-center gap-2 p-4 text-center text-sm text-gray-500">
+            <div
+              class="flex h-full w-full flex-col items-center justify-center gap-2 p-4 text-center text-sm text-gray-500"
+            >
               <div class="flex flex-col items-center">
                 <div class="mb-4 rounded-md bg-gray-100 p-2">
                   <RabbitIcon class="h-12 w-12 stroke-[1.5px] text-gray-500" />

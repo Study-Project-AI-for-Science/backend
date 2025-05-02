@@ -112,8 +112,15 @@ const popoverStyle = computed(() => {
       @keypress.enter="onOpen({ keyboard: true })"
       class="flex w-full cursor-default items-center justify-between rounded-md bg-neutral-100 px-2.5 py-1.5 text-sm ring-blue-600 outline-none focus:ring-2 focus:outline-0"
     >
-      <div v-if="placeholder && model === null" class="overflow-hidden text-sm text-nowrap overflow-ellipsis text-neutral-700">{{ placeholder }}</div>
-      <div v-else class="overflow-hidden text-sm text-nowrap overflow-ellipsis text-neutral-900">{{ options.find((o) => o.value == model)?.display }}</div>
+      <div
+        v-if="placeholder && model === null"
+        class="overflow-hidden text-sm text-nowrap overflow-ellipsis text-neutral-700"
+      >
+        {{ placeholder }}
+      </div>
+      <div v-else class="overflow-hidden text-sm text-nowrap overflow-ellipsis text-neutral-900">
+        {{ options.find((o) => o.value == model)?.display }}
+      </div>
       <ChevronDownIcon v-show="!open" class="ml-2 size-4 text-neutral-700" />
       <ChevronUpIcon v-show="open" class="ml-2 size-4 text-neutral-700" />
     </div>

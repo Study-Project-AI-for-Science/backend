@@ -11,7 +11,12 @@ interface Props {
   textCenter?: boolean
 }
 
-const { variant = "primary", type = "button", loading = false, textCenter = false } = defineProps<Props>()
+const {
+  variant = "primary",
+  type = "button",
+  loading = false,
+  textCenter = false,
+} = defineProps<Props>()
 </script>
 
 <template>
@@ -34,7 +39,10 @@ const { variant = "primary", type = "button", loading = false, textCenter = fals
     <div v-if="$slots.default" class="inline" :class="{ 'opacity-0': loading }">
       <slot></slot>
     </div>
-    <div v-if="loading" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transform">
+    <div
+      v-if="loading"
+      class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transform"
+    >
       <LoaderCircleIcon class="size-5 animate-spin" />
     </div>
   </component>
