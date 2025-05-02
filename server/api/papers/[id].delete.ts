@@ -1,26 +1,44 @@
-import { paperDelete } from "~~/packages/database/db"
+import { paperEmbeddings, paperReferences, papers } from "~~/packages/database/schema"
+import { eq } from "drizzle-orm"
 import { z } from "zod"
 
 const routeParams = z.object({
   id: z.string(),
 })
 
-// Example: Delete a paper by ID
 export default defineEventHandler(async (event) => {
-  const { id } = await getValidatedRouterParams(event, routeParams.parse)
+  const { id: paperId } = await getValidatedRouterParams(event, routeParams.parse)
 
-  try {
-    await paperDelete(id)
+  await useDrizzle().transaction(async (tx) => {
+    await tx.delete(paperEmbeddings).where(eq(paperEmbeddings.paperId, paperId))
+    await tx.delete(paperReferences).where(eq(paperReferences.paperId, paperId))
 
-    return {
-      success: true,
-      message: `Paper with id ${id} deleted successfully.`,
+    // 3. Nullify references pointing TO this paper
+    const referencesToUpdate = await tx
+      .select({ id: paperReferences.id })
+      .from(paperReferences)
+      .where(eq(paperReferences.referencePaperId, paperId))
+
+    if (referencesToUpdate.length > 0) {
+      await tx
+        .update(paperReferences)
+        .set({ referencePaperId: null })
+        .where(eq(paperReferences.referencePaperId, paperId))
+      console.log(`Nullified ${referencesToUpdate.length} references pointing to paper ${paperId}`)
+    } else {
+      console.log(`No references found pointing to paper ${paperId}.`)
     }
-  } catch (error: any) {
-    console.error(`Error deleting paper ${id}:`, error)
-    throw createError({
-      statusCode: 500,
-      statusMessage: `Failed to delete paper: ${error.message || "Unknown error"}`,
-    })
-  }
+
+    // 4. Delete the paper itself and get the fileUrl
+    const [deletedPaperResult] = await tx
+      .delete(papers)
+      .where(eq(papers.id, paperId))
+      .returning({ fileUrl: papers.fileUrl })
+
+    if (!deletedPaperResult) throw new Error(`Paper with ID ${paperId} not found for deletion.`)
+
+    // TODO: storage.deleteFile(fileUrlToDelete)
+  })
+
+  return {}
 })

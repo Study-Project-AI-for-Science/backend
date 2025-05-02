@@ -1,15 +1,15 @@
 // import { spawn } from "child_process"
 // import path from "path"
-// import { fileURLToPath } from "url" // Import fileURLToPath
+// import { fileURLToPath } from "url"
 
 // // Get the directory name in ES module scope
 // const __filename = fileURLToPath(import.meta.url)
 // const __dirname = path.dirname(__filename)
 
 // // Determine the absolute path to the Python script
-// // Assuming arxivUtils.ts is in backend/packages/retriever/
-// // and main.py is in backend/modules/retriever/arxiv/
-// const pythonScriptPath = path.resolve(__dirname, "../../modules/retriever/arxiv/main.py")
+// // Assuming latexUtils.ts is in backend/packages/latexParser/
+// // and main.py is in backend/modules/latex_parser/
+// const pythonScriptPath = path.resolve(__dirname, "../../modules/latex_parser/main.py")
 // const pythonExecutable = process.env.PYTHON_EXECUTABLE || "python3" // Or just 'python'
 
 // /**
@@ -21,7 +21,6 @@
 // async function runPythonScript<T>(functionName: string, args: Record<string, string>): Promise<T> {
 //   const scriptArgs = ["--function", functionName]
 //   for (const [key, value] of Object.entries(args)) {
-//     // Ensure value is a string before pushing
 //     scriptArgs.push(`--${key}`, String(value))
 //   }
 
@@ -61,7 +60,7 @@
 //       } else {
 //         try {
 //           if (!stdoutData.trim()) {
-//             resolve(null as T) // Handle cases where Python returns None
+//             resolve(null as T) // Handle cases where Python returns None or empty output
 //           } else {
 //             const result = JSON.parse(stdoutData)
 //             resolve(result as T)
@@ -80,43 +79,20 @@
 //   })
 // }
 
-// export async function extractArxivIds(text: string): Promise<string[]> {
-//   // Call the python script to extract arXiv IDs
-//   const result = await runPythonScript<string[]>("extract_arxiv_ids", { text })
+// export async function extractReferences(sourceDir: string): Promise<Record<string, any>[]> {
+//   // Call the python script to extract references
+//   const result = await runPythonScript<Record<string, any>[]>("extract_references", {
+//     source_dir: sourceDir,
+//   })
 //   return result ?? [] // Return empty array if result is null/undefined
 // }
 
-// export async function paperDownloadArxivId(arxivId: string, tempDir: string): Promise<string> {
-//   // Call the python script to download the paper by arXiv ID
-//   const result = await runPythonScript<string>("paper_download_arxiv_id", {
-//     arxiv_id: arxivId,
-//     output_dir: tempDir,
+// export async function parseLatexToMarkdown(sourceDirOrFilePath: string): Promise<string> {
+//   // Call the python script to parse LaTeX to Markdown
+//   // The python script expects the argument named 'path'
+//   // It returns an object like { markdown: "..." }
+//   const result = await runPythonScript<{ markdown: string }>("parse_latex_to_markdown", {
+//     path: sourceDirOrFilePath,
 //   })
-//   return result ?? "" // Return empty string if result is null/undefined (e.g., download failed)
-// }
-
-// // Add function to get metadata
-// export interface ArxivMetadata {
-//   title: string
-//   authors: string // Comma-separated string
-//   abstract: string
-//   url: string
-//   arxiv_id: string
-//   published_date: any // Consider using Date or string depending on format
-//   updated_date: any // Consider using Date or string depending on format
-// }
-
-// export async function getArxivMetadata(filePath: string): Promise<ArxivMetadata | null> {
-//   // Call the python script to get paper metadata from a file path
-//   // The python script returns an empty dict {} if metadata is not found, or null on error.
-//   const result = await runPythonScript<ArxivMetadata | {}>("paper_get_metadata", {
-//     file_path: filePath,
-//   })
-
-//   // Check if the result is an empty object, which indicates metadata not found by the script
-//   if (result && typeof result === "object" && Object.keys(result).length === 0) {
-//     return null
-//   }
-
-//   return result as ArxivMetadata | null
+//   return result?.markdown ?? "" // Return the markdown string or empty string if result is null/undefined
 // }
