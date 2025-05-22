@@ -1,6 +1,11 @@
 import { papers } from "~~/packages/database/schema"
+import { extractText, getDocumentProxy } from "unpdf"
+import parser from "xml2json"
+
 import * as crypto from "node:crypto"
 import { uuidv7 } from "uuidv7"
+import { z } from "zod"
+import { eq } from "drizzle-orm"
 
 export default defineEventHandler(async (event) => {
   const formData = await readFormData(event)
@@ -22,25 +27,147 @@ export default defineEventHandler(async (event) => {
     .insert(papers)
     .values({
       id: paperId,
+      title: "",
+      authors: "",
+      abstract: "",
       fileHash: fileHash,
       fileUrl: fileUrl,
-      authors: "",
-      title: "",
-      abstract: "",
     })
     .returning()
 
   if (!paper) throw createError({ statusCode: 500, statusMessage: "Failed to insert paper" })
 
-  // Background jobs
-  // await arxivPaperMetadata()
-  // -> await arxivPaperDownload()
-  // -> await arxivPaperReferences()
-  // -> await paperLaTeXToMarkdown()
-  // -> await paperEmbeddings()
+  // Extract metadata from arXiv paper in the background
+  event.waitUntil(arxivPaperMetadata({ paper }))
 
   return paper
 })
+
+async function arxivPaperMetadata({ paper }: { paper: typeof papers.$inferInsert }): Promise<void> {
+  // TODO:
+  await arxivPaperDownload({ paper }) // ✅
+  await arxivPaperReferences({ paper })
+  await paperLaTeXToMarkdown({ paper })
+  await paperEmbeddings({ paper })
+}
+
+async function arxivPaperDownload({ paper }: { paper: typeof papers.$inferInsert }) {
+  // download the pdf
+  const paperFile = await useS3Storage().getItemRaw(paper.fileUrl)
+  const pdfFile = await extractText(paperFile)
+  const pdfText = pdfFile.text
+
+  const pattern = /\d{4}\.\d{5}/
+  // search with regex for all the arxiv ids
+  const arxivIds = pdfText.join("\n\n").match(pattern)
+
+  if (!arxivIds) throw new Error("No arXiv IDs found in the PDF")
+
+  for (const arxivId of arxivIds) {
+    // download the arxiv paper
+    const res = await fetch(`https://export.arxiv.org/api/query?id_list=${arxivId}`)
+    const xml = await res.text()
+    // parse xml to json
+    const data = JSON.parse(parser.toJson(xml)) as unknown as z.infer<typeof arxivPaperSchema>
+
+    console.log(data)
+
+    if (data.feed.entry.id === "http://arxiv.org/api/errors#incorrect_id_format_for_1707.08567a") {
+      continue
+    }
+
+    // hurraayy we found a paper
+    const foundPaper = {
+      title: data.feed.entry.title,
+      authors: data.feed.entry.author.map((author) => author.name).join(", "),
+      abstract: data.feed.entry.summary,
+      onlineUrl: `http://arxiv.org/abs/${arxivId}`,
+    }
+
+    // TODO: validate the found paper data using e.g. zod
+
+    // update the database
+    await useDrizzle()
+      .update(papers)
+      .set({
+        title: foundPaper.title,
+        authors: foundPaper.authors,
+        abstract: foundPaper.abstract,
+        onlineUrl: foundPaper.onlineUrl,
+      })
+      .where(eq(papers.id, paper.id!))
+
+    break
+  }
+}
+
+export const arxivPaperSchema = z.object({
+  feed: z.object({
+    link: z.object({ _href: z.string(), _rel: z.string(), _type: z.string() }),
+    title: z.object({ _type: z.string(), __text: z.string() }),
+    id: z.string(),
+    updated: z.string(),
+    totalResults: z.object({
+      "_xmlns:opensearch": z.string(),
+      __prefix: z.string(),
+      __text: z.string(),
+    }),
+    startIndex: z.object({
+      "_xmlns:opensearch": z.string(),
+      __prefix: z.string(),
+      __text: z.string(),
+    }),
+    itemsPerPage: z.object({
+      "_xmlns:opensearch": z.string(),
+      __prefix: z.string(),
+      __text: z.string(),
+    }),
+    entry: z.object({
+      id: z.string(),
+      updated: z.string(),
+      published: z.string(),
+      title: z.string(),
+      summary: z.string(),
+      author: z.array(z.object({ name: z.string() })),
+      comment: z.object({
+        "_xmlns:arxiv": z.string(),
+        __prefix: z.string(),
+        __text: z.string(),
+      }),
+      link: z.array(
+        z.union([
+          z.object({ _href: z.string(), _rel: z.string(), _type: z.string() }),
+          z.object({
+            _title: z.string(),
+            _href: z.string(),
+            _rel: z.string(),
+            _type: z.string(),
+          }),
+        ]),
+      ),
+      primary_category: z.object({
+        "_xmlns:arxiv": z.string(),
+        _term: z.string(),
+        _scheme: z.string(),
+        __prefix: z.string(),
+      }),
+      category: z.array(z.object({ _term: z.string(), _scheme: z.string() })),
+    }),
+    _xmlns: z.string(),
+  }),
+})
+
+async function arxivPaperReferences({ paper }: { paper: typeof papers.$inferInsert }) {
+  // TODO
+}
+
+async function paperLaTeXToMarkdown({ paper }: { paper: typeof papers.$inferInsert }) {
+  // TODO
+}
+
+async function paperEmbeddings({ paper }: { paper: typeof papers.$inferInsert }) {
+  // TODO
+}
 
 // Helper
 async function fileToSHA256Hash(file: File): Promise<string> {

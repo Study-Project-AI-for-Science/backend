@@ -21,7 +21,7 @@ export const users = pgTable("users", {
 
 export const sessions = pgTable("sessions", {
   token: text().primaryKey().notNull(),
-  userId: integer()
+  userId: text()
     .notNull()
     .references(() => users.id),
   ...timestamps,

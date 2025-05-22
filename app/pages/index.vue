@@ -5,12 +5,9 @@ const query = ref("")
 
 const config = useRuntimeConfig()
 
-const { data: data, refresh } = await useFetch(`${config.public.apiBase}/papers`, {
-  params: { query: refDebounced(query, 250) },
-  cache: "no-cache",
-})
+const { data, refresh } = await useFetch(`/api/papers`)
 
-const papers = computed(() => data.value?.papers ?? [])
+const papers = computed(() => data.value?.papers)
 
 // async function refreshLoadingPapers() {
 //   if (papers.value?.some((paper) => paper.status === "pending")) {
@@ -32,7 +29,7 @@ onChange(async (files) => {
 
     formData.append("file", file)
 
-    await $fetch(`${config.public.apiBase}/papers`, {
+    await $fetch(`/api/papers`, {
       method: "POST",
       body: formData,
     })
@@ -77,7 +74,7 @@ useIntervalFn(async () => {
     </DHeader>
     <DPageContent>
       <div
-        v-if="papers.length > 0"
+        v-if="papers && papers.length > 0"
         class="grid gap-2.5 p-2"
         :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, 200px), 1fr))` }"
       >

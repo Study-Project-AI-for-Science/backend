@@ -12,43 +12,8 @@
     {
       "idx": 1,
       "version": "7",
-      "when": 1744299516453,
-      "tag": "0001_wide_chamber",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1744299549817,
-      "tag": "0002_tan_carlie_cooper",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1744299572493,
-      "tag": "0003_busy_deathstrike",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1744299577456,
-      "tag": "0004_massive_lester",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1744573993201,
-      "tag": "0005_overconfident_baron_strucker",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1744716879230,
-      "tag": "0006_ancient_roulette",
+      "when": 1747922309450,
+      "tag": "0001_cooing_sue_storm",
       "breakpoints": true
     }
   ]

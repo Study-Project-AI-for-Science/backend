@@ -1,1 +1,0 @@
-ALTER TABLE "paper_embeddings" ADD COLUMN "updated_at" timestamp with time zone;

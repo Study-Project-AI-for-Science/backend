@@ -9,7 +9,7 @@ const querySchema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
-  const { page, pageSize } = await readValidatedBody(event, querySchema.parse)
+  const { page, pageSize } = await getValidatedQuery(event, querySchema.parse)
 
   const offset = (page - 1) * pageSize
 
