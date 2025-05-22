@@ -8,7 +8,7 @@ const paperId = route.params.id
 
 const config = useRuntimeConfig()
 
-const { data: paper, refresh } = await useFetch(`${config.public.apiBase}/papers/${paperId}`)
+const { data: paper, refresh } = await useFetch(`/api/papers/${paperId}`)
 const { data: references, refresh: refreshReferences } = await useFetch(
   `${config.public.apiBase}/papers/${paperId}/references`,
 )
