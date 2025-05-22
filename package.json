@@ -1,0 +1,47 @@
+{
+  "name": "nuxt-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "pretty": "prettier --write \"./**/*.{js,jsx,mjs,cjs,ts,tsx,json}\"",
+    "setup:create-bucket": "node ./scripts/createBucket.ts",
+    "setup": "sh ./scripts/setup.sh"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.815.0",
+    "@tailwindcss/vite": "4.1.7",
+    "@types/xml2json": "^0.11.6",
+    "@vueuse/nuxt": "13.2.0",
+    "ai": "^4.3.16",
+    "aws4fetch": "^1.0.20",
+    "dompurify": "^3.2.6",
+    "drizzle-orm": "0.43.1",
+    "marked": "^15.0.12",
+    "nanoid": "5.1.5",
+    "nuxt": "3.17.4",
+    "nuxt-auth-utils": "0.5.20",
+    "ollama-ai-provider": "^1.2.0",
+    "pdfjs-dist": "^5.2.133",
+    "postgres": "3.4.7",
+    "prettier": "^3.5.3",
+    "prettier-plugin-tailwindcss": "0.6.11",
+    "tailwindcss": "4.1.7",
+    "unpdf": "^1.0.4",
+    "uuidv7": "^1.0.2",
+    "vue": "3.5.14",
+    "vue-router": "4.5.1",
+    "xml2json": "^0.12.0",
+    "zod": "3.25.20"
+  },
+  "devDependencies": {
+    "bun-types": "^1.2.14",
+    "drizzle-kit": "0.31.1"
+  }
+}

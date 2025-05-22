@@ -1,18 +1,25 @@
 # Backend
 
 ## How to start it up
+
 ### Startup database for local development
+
 To spin up the database for local testing/development follow the following steps:
+
 1. Install [docker](https://docs.docker.com/engine/install/)
 2. install [uv](https://docs.astral.sh/uv/) (explanation down below)
-    - fastest way for mac and linux is: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-    - for Windows: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
+   - fastest way for mac and linux is: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+   - for Windows: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
 3. Install pandoc in a way that works for you (on Mac typically using brew)
-4. For Mac/Linux: run `chmod +x ./scripts/setup.sh && ./scripts/setup.sh`
-5. For Windows: run `bash ./scripts/setup.sh` (This works in PowerShell with Docker WSL integration enabled)
-   
+4. Install [bun](https://bun.sh/docs/installation)
+5. Run `bun install`
+6. For Mac/Linux: run `chmod +x ./scripts/setup.sh && ./scripts/setup.sh`
+7. For Windows: run `bash ./scripts/setup.sh` (This works in PowerShell with Docker WSL integration enabled)
+
 <br>
 If you want to also insert a few sample files to the database as well as the s3 storage, you can insted replace step three with the following: <br>
+
+#### CURRENTLY NOT WORKING!
 
 1. For Max/Linux: run `chmod +x ./setup_with_samples.sh && ./setup_with_samples.sh`
 2. For Windows: run `bash ./setup_with_samples.sh` (This works in PowerShell with Docker WSL integration enabled)
@@ -23,20 +30,19 @@ If everthing worked as intended, the postgressql database and the s3 storage are
 
 Sometimes, maybe if something goes wrong, you want to test something, or for some other reason, you want to delete the database and start with a clean one, simply follow the following steps:
 
-1. stop and delete the running docker containers (in the dashboard using docker desktop simply click on the bin for the aiforscience docker compose) 
+1. stop and delete the running docker containers (in the dashboard using docker desktop simply click on the bin for the aiforscience docker compose)
 2. Delete the volumes folder
 3. Run one of the setup scripts and afterwards you are good to go again
 
 ### Start the backend
-1. install [uv](https://docs.astral.sh/uv/) (explanation down below)
-    - fastest way for mac and linux is: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-    - for Windows: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
-2. run `uv run run.py`
 
+1. Make sure the docker daemon is running
+2. Make sure a working .env file is created
+3. Run `bun run setup`
 
-### How to use uv
+### How to use uv (Everything below this is currently outdated)
 
-We chose uv as our tool of choice because it’s lightweight, fast, and is a all in one tool for python projects and dependency management. It handles everything that needs to be taken care of in the background and this while being extremly fast. 
+We chose uv as our tool of choice because it’s lightweight, fast, and is a all in one tool for python projects and dependency management. It handles everything that needs to be taken care of in the background and this while being extremly fast.
 
 Here is a small guide on how to work with it:
 
@@ -54,20 +60,18 @@ This installs the package into your environment and adds it to the pyproject.tom
 
 To delete a dependency, you can eiter delete it from the pyproject.toml or run <br>
 
-`uv remove XYZ` 
+`uv remove XYZ`
 
 To run ruff with uv, you can use <br>
 
- `uv run ruff check (--fix)` <br> 
- 
- and <br>
+`uv run ruff check (--fix)` <br>
 
- `uv run ruff format` <br>
+and <br>
 
- To run the tests in the tests folder simply run <br>
+`uv run ruff format` <br>
 
- `uv run pytest` <br>
+To run the tests in the tests folder simply run <br>
 
- 
+`uv run pytest` <br>
 
 For further information and advanced configuration options, you can refer to the uv documentation, or ask @Antim8
