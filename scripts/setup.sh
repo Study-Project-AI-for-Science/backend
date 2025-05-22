@@ -23,11 +23,8 @@ until nc -z localhost 5432; do
 done
 echo "PostgreSQL is ready!"
 
-# Run the Python setup script to create the bucket
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
-echo "Running script to set up the 'papers' bucket..."
-bun run setup:create-bucket
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 echo "Running migrations..."
 bun run db:migrate

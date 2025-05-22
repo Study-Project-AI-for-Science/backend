@@ -1,10 +1,10 @@
-# LLMs for Science - Daily Development Workflow
+# [OUTDATED] LLMs for Science - Daily Development Workflow
 
 This document provides a concise guide for the development workflow in this project. For initial setup instructions, please refer to the [README.md](README.md).
 
 ## Table of Contents
 
-- [LLMs for Science - Daily Development Workflow](#llms-for-science---daily-development-workflow)
+- [\[OUTDATED\] LLMs for Science - Daily Development Workflow](#outdated-llms-for-science---daily-development-workflow)
   - [Table of Contents](#table-of-contents)
   - [Running a singular file](#running-a-singular-file)
   - [Managing Dependencies](#managing-dependencies)
