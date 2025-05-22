@@ -10,22 +10,15 @@ const config = useRuntimeConfig()
 
 const { data: paper, refresh } = await useFetch(`/api/papers/${paperId}`)
 const { data: references, refresh: refreshReferences } = await useFetch(
-  `${config.public.apiBase}/papers/${paperId}/references`,
+  `/api/papers/${paperId}/references`,
 )
 
 function markdownToHtml(markdown: string) {
   if (!markdown) return ""
-  const html = marked(markdown)
+  const html = marked(markdown) as string
   // sanitize the html
   const sanitizedHtml = DOMPurify.sanitize(html)
   return sanitizedHtml
-}
-
-function paperWithoutContent(paper: Paper) {
-  // return paper object without content field. do not use json.stringify
-  const paperWithoutContent = { ...paper }
-  delete paperWithoutContent.content
-  return paperWithoutContent
 }
 
 // auto refresh
@@ -56,7 +49,7 @@ useIntervalFn(async () => {
           <div class="flex flex-col gap-2">
             <div class="text-xl font-semibold">Online Url</div>
             <div>
-              <a :href="paper.online_url" target="_blank">{{ paper.online_url }}</a>
+              <a :href="paper.onlineUrl" target="_blank">{{ paper.onlineUrl }}</a>
             </div>
           </div>
           <div></div>

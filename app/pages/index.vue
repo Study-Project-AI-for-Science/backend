@@ -1,21 +1,11 @@
 <script setup lang="ts">
-import { CloudUploadIcon, LoaderCircleIcon, RabbitIcon, SearchIcon } from "lucide-vue-next"
+import { CloudUploadIcon, RabbitIcon, SearchIcon } from "lucide-vue-next"
 
 const query = ref("")
-
-const config = useRuntimeConfig()
 
 const { data, refresh } = await useFetch(`/api/papers`)
 
 const papers = computed(() => data.value?.papers)
-
-// async function refreshLoadingPapers() {
-//   if (papers.value?.some((paper) => paper.status === "pending")) {
-//     await refresh()
-//   }
-// }
-
-// useTimeoutPoll(refreshLoadingPapers, 1000)
 
 const { open, onChange } = useFileDialog({
   accept: "application/pdf",
@@ -43,10 +33,8 @@ function uploadPaper() {
   open()
 }
 
-// auto refresh
-useIntervalFn(async () => {
-  await refresh()
-}, 1000)
+// auto refresh every second
+useIntervalFn(refresh, 1000)
 </script>
 
 <template>
