@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
   await useS3Storage().setItemRaw(paperId, file)
 
   const fileHash = await fileToSHA256Hash(file)
-  const fileUrl = paperId
+  const fileUrl = `${process.env.NUXT_S3_ENDPOINT}/${process.env.NUXT_S3_BUCKET}/${paperId}`
 
   // Write paper to database
   const [paper] = await useDrizzle()
