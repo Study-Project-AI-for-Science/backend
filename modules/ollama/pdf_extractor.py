@@ -1,6 +1,5 @@
 from unstructured.partition.pdf import partition_pdf
 
-
 def extract_pdf_content(pdf_path, max_context_length=512):
     """
     Extracts structured content (titles + associated elements) from a PDF file.
@@ -12,7 +11,7 @@ def extract_pdf_content(pdf_path, max_context_length=512):
     content(list): a list of extracted chunks where each chunks is a dict. The chunks content can be accessed under argument "content"
 
     """
-    print(f"Processing PDF: {pdf_path}")
+    # print(f"Processing PDF: {pdf_path}")
 
     # Parse the PDF into elements using unstructured
     chunks = partition_pdf(

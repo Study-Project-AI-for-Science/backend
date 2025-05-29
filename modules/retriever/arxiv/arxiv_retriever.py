@@ -275,7 +275,6 @@ def paper_get_metadata(file_path: str) -> Optional[dict]:
 
     # Try to find arxiv ID in filename
     arxiv_ids = extract_arxiv_ids(file_path)
-    print("THIS IS DA FILEPATH" + file_path)
     if arxiv_ids:
         logger.debug(f"Found arXiv ID in filename: {arxiv_ids[0]}")
         try:

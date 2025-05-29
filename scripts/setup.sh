@@ -23,18 +23,14 @@ until nc -z localhost 5432; do
 done
 echo "PostgreSQL is ready!"
 
-# Run the Python setup script to create the bucket
+
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
-echo "Running Python script to set up the 'papers' bucket..."
-uv run "$SCRIPT_DIR/create_bucket.py"
-
 echo "Running migrations..."
-uv run "$SCRIPT_DIR/run_migrations.py"
+bun run db:migrate
 
 
 echo "Setup completed successfully!"
 
-echo "Starting Flask backend..."
-cd "$(dirname "$SCRIPT_DIR")"  # Move to project root
-FLASK_ENV=development uv run run.py
+echo "Starting backend..."
+bun run dev --host
