@@ -1,11 +1,19 @@
-import { papers } from "~~/packages/database/schema"
+import { papers, paperEmbeddings, paperReferences } from "~~/packages/database/schema"
 import { extractText, getDocumentProxy } from "unpdf"
 import parser from "xml2json"
 
 import * as crypto from "node:crypto"
+import * as fs from "node:fs/promises"
+import * as path from "node:path"
+import * as os from "node:os"
+import * as tar from "tar"
 import { uuidv7 } from "uuidv7"
 import { z } from "zod"
 import { eq } from "drizzle-orm"
+
+import { spawn } from "child_process"
+import { fileURLToPath } from "url"
+import { Console } from "node:console"
 
 export default defineEventHandler(async (event) => {
   const formData = await readFormData(event)
@@ -36,6 +44,7 @@ export default defineEventHandler(async (event) => {
     .returning()
 
   if (!paper) throw createError({ statusCode: 500, statusMessage: "Failed to insert paper" })
+  else console.info(`Paper ${paper.id} inserted successfully`)
 
   // Extract metadata from arXiv paper in the background
   event.waitUntil(arxivPaperMetadata({ paper }))
@@ -45,15 +54,25 @@ export default defineEventHandler(async (event) => {
 
 async function arxivPaperMetadata({ paper }: { paper: typeof papers.$inferInsert }): Promise<void> {
   // TODO:
-  await arxivPaperDownload({ paper }) // ✅
-  await arxivPaperReferences({ paper })
-  await paperLaTeXToMarkdown({ paper })
-  await paperEmbeddings({ paper })
+  const sourceDir = await arxivPaperDownload({ paper }) // ✅
+  if (sourceDir) {
+    await arxivPaperReferences({ paper }, sourceDir)
+    const markdownContent = await paperLaTeXToMarkdown({ paper }, sourceDir)
+    await paperEmbeddingsMarkdownCreate({ paper }, markdownContent)
+  } else {
+    console.error("No source directory found for the arXiv paper")
+    await paperEmbeddingsCreate({ paper }) // Fallback to embeddings using the PDF text
+  }
+  console.info(`Finished processing ${paper.id} arXiv paper metadata`)
 }
 
-async function arxivPaperDownload({ paper }: { paper: typeof papers.$inferInsert }) {
+async function arxivPaperDownload({
+  paper,
+}: {
+  paper: typeof papers.$inferInsert
+}): Promise<string> {
   // download the pdf
-  const paperFile = await useS3Storage().getItemRaw(paper.fileUrl)
+  const paperFile = await useS3Storage().getItemRaw(paper.id!)
   const pdfFile = await extractText(paperFile)
   const pdfText = pdfFile.text
 
@@ -84,6 +103,32 @@ async function arxivPaperDownload({ paper }: { paper: typeof papers.$inferInsert
       onlineUrl: `http://arxiv.org/abs/${arxivId}`,
     }
 
+    // download the source from arxiv
+    const sourceUrl = foundPaper.onlineUrl.replace("abs", "src")
+    const sourceRes = await fetch(sourceUrl)
+    if (!sourceRes.ok) {
+      console.error(`Failed to download source from ${sourceUrl}: ${sourceRes.statusText}`)
+      continue
+    }
+    // The source is a tar.gz file, we need to extract it to a temporary directory
+    const sourceBuffer = await sourceRes.arrayBuffer()
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), `arxiv-${arxivId}-`))
+    const tarGzPath = path.join(tempDir, `${arxivId}.tar.gz`)
+
+    // Write the tar.gz file to temp directory
+    await fs.writeFile(tarGzPath, Buffer.from(sourceBuffer))
+
+    // Extract the tar.gz file
+    await tar.extract({
+      file: tarGzPath,
+      cwd: tempDir,
+    })
+
+    // Remove the tar.gz file after extraction
+    await fs.unlink(tarGzPath)
+
+    const extractedSourceDir = tempDir
+
     // TODO: validate the found paper data using e.g. zod
 
     // update the database
@@ -97,8 +142,9 @@ async function arxivPaperDownload({ paper }: { paper: typeof papers.$inferInsert
       })
       .where(eq(papers.id, paper.id!))
 
-    break
+    return extractedSourceDir
   }
+  return ""
 }
 
 export const arxivPaperSchema = z.object({
@@ -157,15 +203,48 @@ export const arxivPaperSchema = z.object({
   }),
 })
 
-async function arxivPaperReferences({ paper }: { paper: typeof papers.$inferInsert }) {
+async function arxivPaperReferences(
+  { paper }: { paper: typeof papers.$inferInsert },
+  sourceDir: string,
+) {
+  const references = await runPythonScript<Record<string, any>[]>("extract_references", {
+    source_dir: sourceDir,
+  })
+
+  if (references.length > 0) {
+    console.info("Inserting references into the database")
+    try {
+      // Map references to ReferenceInput type
+      const referenceInputs = references.map((ref) => ({
+        id: ref.id ?? "",
+        title: ref.title ?? "",
+        authors: ref.authors ?? "",
+        raw_bibtex: ref.raw_bibtex ?? "",
+        ...ref,
+      }))
+      await paperReferencesInsertMany(paper.id!, referenceInputs)
+    } catch (error) {
+      console.error("Error inserting references into the database:", error)
+    }
+  }
+}
+
+async function paperLaTeXToMarkdown(
+  { paper }: { paper: typeof papers.$inferInsert },
+  sourceDir: string,
+): Promise<string> {
+  // TODO
+  return ""
+}
+
+async function paperEmbeddingsCreate({ paper }: { paper: typeof papers.$inferInsert }) {
   // TODO
 }
 
-async function paperLaTeXToMarkdown({ paper }: { paper: typeof papers.$inferInsert }) {
-  // TODO
-}
-
-async function paperEmbeddings({ paper }: { paper: typeof papers.$inferInsert }) {
+async function paperEmbeddingsMarkdownCreate(
+  { paper }: { paper: typeof papers.$inferInsert },
+  markdownContent: string,
+) {
   // TODO
 }
 
@@ -174,6 +253,138 @@ async function fileToSHA256Hash(file: File): Promise<string> {
   const arrayBuffer = await file.arrayBuffer()
   const buffer = Buffer.from(arrayBuffer)
   return crypto.createHash("sha256").update(buffer).digest("hex")
+}
+
+/**
+ * Helper function to run the Python script and get JSON output.
+ * @param functionName The name of the Python function to call.
+ * @param args Arguments for the Python script.
+ * @returns Promise resolving with the parsed JSON output.
+ */
+async function runPythonScript<T>(functionName: string, args: Record<string, string>): Promise<T> {
+  const scriptArgs = ["--function", functionName]
+  for (const [key, value] of Object.entries(args)) {
+    scriptArgs.push(`--${key}`, String(value))
+  }
+
+  const __filename = fileURLToPath(import.meta.url)
+  const __dirname = path.dirname(__filename)
+
+  const pythonScriptPath = path.resolve(__dirname, "../../modules/latex_parser/main.py")
+  const pythonExecutable = process.env.PYTHON_EXECUTABLE || "python3"
+
+  return new Promise((resolve, reject) => {
+    const pythonProcess = spawn(pythonExecutable, [pythonScriptPath, ...scriptArgs])
+
+    let stdoutData = ""
+    let stderrData = ""
+
+    pythonProcess.stdout.on("data", (data) => {
+      stdoutData += data.toString()
+    })
+
+    pythonProcess.stderr.on("data", (data) => {
+      stderrData += data.toString()
+    })
+
+    pythonProcess.on("close", (code) => {
+      if (code !== 0) {
+        console.error(
+          `Python script (${pythonScriptPath}) stderr for ${functionName}: ${stderrData}`,
+        )
+        try {
+          const errorJson = JSON.parse(stderrData)
+          reject(
+            new Error(
+              `Python script error (${functionName}): ${errorJson.error || stderrData} (Type: ${errorJson.type || "Unknown"})`,
+            ),
+          )
+        } catch (e) {
+          reject(
+            new Error(
+              `Python script exited with code ${code} for function ${functionName}. Stderr: ${stderrData}`,
+            ),
+          )
+        }
+      } else {
+        try {
+          if (!stdoutData.trim()) {
+            resolve(null as T) // Handle cases where Python returns None or empty output
+          } else {
+            const result = JSON.parse(stdoutData)
+            resolve(result as T)
+          }
+        } catch (error) {
+          console.error(`Failed to parse Python script output for ${functionName}: ${stdoutData}`)
+          reject(new Error(`Failed to parse Python script output for ${functionName}: ${error}`))
+        }
+      }
+    })
+
+    pythonProcess.on("error", (error) => {
+      console.error(`Failed to start Python script (${pythonScriptPath}): ${error}`)
+      reject(new Error(`Failed to start Python script for ${functionName}: ${error.message}`))
+    })
+  })
+}
+
+export interface ReferenceInput {
+  id: string // Citation key
+  title: string
+  authors: string
+  raw_bibtex: string
+  [key: string]: any // Allow additional fields like booktitle, year, etc.
+}
+
+export async function paperReferencesInsertMany(
+  paperId: string,
+  references: ReferenceInput[],
+): Promise<number> {
+  if (!references || references.length === 0) {
+    console.warn("No references provided to insert.")
+    // throw new Error("References list cannot be empty."); // Or a custom ValueError
+    return 0
+  }
+
+  // Process each reference to find/insert ArXiv papers and get their IDs
+  const valuesToInsertPromises = references.map(async (ref) => {
+    //! TODO: Needs to be reimplemented
+    //const referencedPaperId = await processReferenceWithArxivId(ref, "/tmp/ref_papers")
+    // Set referencePaperId to null instead of a non-existent ID
+    const referencedPaperId = null
+
+    // Separate known fields from the rest to store in 'fields'
+    const { id, type, title, authors, raw_bibtex, ...otherFields } = ref
+
+    return {
+      paperId: paperId, // The ID of the paper containing this reference list
+      referenceKey: id, // The citation key (e.g., "turbo")
+      referencePaperId: referencedPaperId, // ID of the referenced paper if found on ArXiv, otherwise null
+      rawBibtex: raw_bibtex,
+      title: title,
+      authors: authors, // Map input 'authors' to schema 'authors'
+      fields: otherFields, // Store remaining fields as JSON
+      // Potentially map other specific fields if needed, e.g., type: type
+    }
+  })
+
+  // Wait for all reference processing to complete
+  const valuesToInsert = await Promise.all(valuesToInsertPromises)
+
+  try {
+    // Assuming paperReferences is the Drizzle schema object for the join table
+    const result = await useDrizzle()
+      .insert(paperReferences)
+      .values(valuesToInsert)
+      .returning({ insertedId: paperReferences.id }) // Return inserted IDs or count
+
+    console.log(`Successfully inserted ${result.length} references for paper ${paperId}.`)
+    return result.length
+  } catch (error) {
+    console.error(`Database error inserting references for paper ${paperId}:`, error)
+    // Consider throwing a custom DatabaseError
+    throw error // Re-throw the caught error
+  }
 }
 
 //   // Temporary folder
