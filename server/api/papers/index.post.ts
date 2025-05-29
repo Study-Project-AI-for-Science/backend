@@ -216,23 +216,270 @@ async function arxivPaperReferences(
   }
 }
 
+// For now implemented the python script to convert LaTeX to Markdown
+// TODO implement this in JavaScript/TypeScript directly
 async function paperLaTeXToMarkdown(
   { paper }: { paper: typeof papers.$inferInsert },
   sourceDir: string,
 ): Promise<string> {
-  // TODO
-  return ""
+  
+  const result = await runPythonScript<{ markdown: string }>("parse_latex_to_markdown", {
+    path: sourceDir,
+  })
+
+  // Update the paper in the database with the markdown content
+  await useDrizzle()
+    .update(papers)
+    .set({
+      content: result?.markdown ?? ""
+    })
+    .where(eq(papers.id, paper.id!))
+
+  console.info(`Updated paper ${paper.id} with markdown content`)
+  return result?.markdown ?? "" // Return the markdown string or empty string if result is null/undefined
 }
 
 async function paperEmbeddingsCreate({ paper }: { paper: typeof papers.$inferInsert }) {
-  // TODO
+  try {
+    console.info(`Starting PDF embedding creation for paper ${paper.id}`)
+    
+    // Get the PDF content from S3
+    const paperFile = await useS3Storage().getItemRaw(paper.id!)
+    const pdfFile = await extractText(paperFile)
+    const pdfText = pdfFile.text.join("\n\n")
+    
+    if (!pdfText.trim()) {
+      console.warn(`No text content found for paper ${paper.id}`)
+      return
+    }
+
+    const ollamaHost = process.env.OLLAMA_HOST || 'http://localhost:11434'
+    const modelName = process.env.OLLAMA_EMBEDDING_MODEL || 'mxbai-embed-large'
+    
+    console.info(`Creating PDF embeddings using direct Ollama API with model: ${modelName}`)
+    
+    // Chunk the text into smaller pieces (approx 512 tokens each)
+    const chunks = chunkTextByTokens(pdfText, 512)
+    console.info(`Split PDF into ${chunks.length} chunks for embedding`)
+    
+    let successfulChunks = 0
+    
+    // Process each chunk
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i]
+      
+      if (!chunk) {
+        console.warn(`Skipping empty chunk ${i} for paper ${paper.id}`)
+        continue
+      }
+      
+      try {
+        console.info(`Processing PDF chunk ${i + 1}/${chunks.length} for paper ${paper.id}`)
+        
+        // Use direct Ollama API to generate embeddings for this chunk
+        const response = await fetch(`${ollamaHost}/api/embeddings`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: modelName,
+            prompt: chunk
+          })
+        })
+        
+        if (!response.ok) {
+          const errorText = await response.text()
+          throw new Error(`Ollama API error for PDF chunk ${i}: ${response.status} - ${errorText}`)
+        }
+        
+        const data = await response.json()
+        const embedding = data.embedding
+        
+        if (!embedding || !Array.isArray(embedding)) {
+          throw new Error(`Invalid embedding response from Ollama API for PDF chunk ${i}`)
+        }
+        
+        console.info(`Generated PDF embedding for chunk ${i + 1}/${chunks.length} (${embedding.length} dimensions)`)
+
+        // Create a hash of the chunk content for deduplication
+        const chunkHash = crypto.createHash('sha256').update(chunk).digest('hex')
+
+        // Insert embedding into database with chunk index in modelVersion
+        await useDrizzle()
+          .insert(paperEmbeddings)
+          .values({
+            paperId: paper.id!,
+            embedding: embedding,
+            modelName: modelName,
+            modelVersion: `pdf-chunk-${i}`, // Include chunk index in version with pdf prefix
+            embeddingHash: chunkHash,
+          })
+          .onConflictDoNothing()
+          
+        successfulChunks++
+        console.info(`Successfully stored PDF embedding for chunk ${i + 1}/${chunks.length}`)
+        
+        // Add a small delay between chunks to avoid overwhelming the API
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
+      } catch (chunkError) {
+        console.error(`Failed to process PDF chunk ${i + 1} for paper ${paper.id}:`, chunkError)
+        // Continue with next chunk instead of failing completely
+      }
+    }
+
+    console.info(`Successfully created PDF embeddings for ${successfulChunks}/${chunks.length} chunks of paper ${paper.id}`)
+  } catch (error) {
+    console.error(`Failed to create PDF embeddings for paper ${paper.id}:`, error)
+  }
+}
+
+/**
+ * Chunk text into smaller pieces based on approximate token count
+ * Uses a simple heuristic: ~4 characters per token
+ */
+function chunkTextByTokens(text: string, maxTokens: number): string[] {
+  const maxChars = maxTokens * 4 // Rough approximation: 4 chars per token
+  const chunks: string[] = []
+  
+  // Split by paragraphs first to maintain semantic boundaries
+  const paragraphs = text.split(/\n\s*\n/)
+  
+  let currentChunk = ""
+  
+  for (const paragraph of paragraphs) {
+    // If adding this paragraph would exceed the limit, save current chunk and start new one
+    if (currentChunk.length + paragraph.length > maxChars && currentChunk.length > 0) {
+      chunks.push(currentChunk.trim())
+      currentChunk = paragraph
+    } else {
+      // Add paragraph to current chunk
+      if (currentChunk.length > 0) {
+        currentChunk += "\n\n" + paragraph
+      } else {
+        currentChunk = paragraph
+      }
+    }
+    
+    // If a single paragraph is too long, split it by sentences
+    if (currentChunk.length > maxChars) {
+      const sentences = currentChunk.split(/[.!?]+/)
+      let sentenceChunk = ""
+      
+      for (const sentence of sentences) {
+        if (sentenceChunk.length + sentence.length > maxChars && sentenceChunk.length > 0) {
+          chunks.push(sentenceChunk.trim())
+          sentenceChunk = sentence
+        } else {
+          if (sentenceChunk.length > 0) {
+            sentenceChunk += ". " + sentence
+          } else {
+            sentenceChunk = sentence
+          }
+        }
+      }
+      
+      currentChunk = sentenceChunk
+    }
+  }
+  
+  // Add the last chunk if it has content
+  if (currentChunk.trim().length > 0) {
+    chunks.push(currentChunk.trim())
+  }
+  
+  // Filter out very small chunks (less than 50 characters)
+  return chunks.filter((chunk): chunk is string => chunk != null && chunk.length >= 50)
 }
 
 async function paperEmbeddingsMarkdownCreate(
   { paper }: { paper: typeof papers.$inferInsert },
   markdownContent: string,
 ) {
-  // TODO
+  try {
+    console.info(`Starting markdown embedding creation for paper ${paper.id}`)
+    
+    if (!markdownContent.trim()) {
+      console.warn(`No markdown content found for paper ${paper.id}, falling back to PDF embeddings`)
+      await paperEmbeddingsCreate({ paper })
+      return
+    }
+
+    const ollamaHost = process.env.OLLAMA_HOST || 'http://localhost:11434'
+    const modelName = process.env.OLLAMA_EMBEDDING_MODEL || 'mxbai-embed-large'
+    
+    console.info(`Creating markdown embeddings using chunking strategy with model: ${modelName}`)
+    
+    // Chunk the markdown content into smaller pieces
+    const chunks = chunkTextByTokens(markdownContent, 512)
+    console.info(`Split markdown content into ${chunks.length} chunks`)
+    
+    // Process each chunk and create embeddings
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i]
+      
+      if (!chunk) {
+        console.warn(`Skipping empty chunk ${i} for paper ${paper.id}`)
+        continue
+      }
+      
+      try {
+        // Use direct Ollama API to generate embeddings for this chunk
+        const response = await fetch(`${ollamaHost}/api/embeddings`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: modelName,
+            prompt: chunk
+          })
+        })
+        
+        if (!response.ok) {
+          const errorText = await response.text()
+          throw new Error(`Ollama API error for chunk ${i}: ${response.status} - ${errorText}`)
+        }
+        
+        const data = await response.json()
+        const embedding = data.embedding
+        
+        if (!embedding || !Array.isArray(embedding)) {
+          throw new Error(`Invalid embedding response from Ollama API for chunk ${i}`)
+        }
+        
+        console.info(`Generated embedding for chunk ${i + 1}/${chunks.length} (${embedding.length} dimensions)`)
+
+        // Create a hash of the chunk content for deduplication
+        const contentHash = crypto.createHash('sha256').update(chunk).digest('hex')
+
+        // Insert embedding into database with chunk index in modelVersion
+        await useDrizzle()
+          .insert(paperEmbeddings)
+          .values({
+            paperId: paper.id!,
+            embedding: embedding,
+            modelName: modelName,
+            modelVersion: `markdown-chunk-${i}`,
+            embeddingHash: contentHash,
+          })
+          .onConflictDoNothing()
+
+        console.info(`Successfully stored embedding for chunk ${i + 1}/${chunks.length}`)
+      } catch (chunkError) {
+        console.error(`Failed to process chunk ${i} for paper ${paper.id}:`, chunkError)
+        // Continue with other chunks even if one fails
+      }
+    }
+
+    console.info(`Completed markdown embeddings for paper ${paper.id} (${chunks.length} chunks)`)
+  } catch (error) {
+    console.error(`Failed to create markdown embeddings for paper ${paper.id}:`, error)
+    // Fallback to PDF embeddings if markdown embedding fails
+    console.info(`Falling back to PDF embeddings for paper ${paper.id}`)
+    await paperEmbeddingsCreate({ paper })
+  }
 }
 
 // Helper
@@ -475,24 +722,24 @@ async function insertPaperFromArxivId(
 
     console.info(`Successfully inserted paper ${paper.id} for arXiv ID ${arxivId}`)
 
-    // Download source and process if needed
-    if (shouldProcessReferences) {
-      try {
-        const sourceDir = await downloadArxivSource(arxivId)
-        if (sourceDir) {
+    // Download source and try markdown embeddings first, regardless of reference processing
+    try {
+      const sourceDir = await downloadArxivSource(arxivId)
+      if (sourceDir) {
+        // Only process references for the main paper to avoid infinite recursion
+        if (shouldProcessReferences) {
           await arxivPaperReferences({ paper }, sourceDir)
-          const markdownContent = await paperLaTeXToMarkdown({ paper }, sourceDir)
-          await paperEmbeddingsMarkdownCreate({ paper }, markdownContent)
-        } else {
-          await paperEmbeddingsCreate({ paper })
         }
-      } catch (error) {
-        console.error(`Error processing references for arXiv ${arxivId}:`, error)
-        // Continue without failing - create embeddings from PDF
+        // Always try markdown embeddings first since we have LaTeX source
+        const markdownContent = await paperLaTeXToMarkdown({ paper }, sourceDir)
+        await paperEmbeddingsMarkdownCreate({ paper }, markdownContent)
+      } else {
+        // Fallback to PDF embeddings if source download failed
         await paperEmbeddingsCreate({ paper })
       }
-    } else {
-      // Just create embeddings without processing references
+    } catch (error) {
+      console.error(`Error processing arXiv ${arxivId}:`, error)
+      // Continue without failing - create embeddings from PDF
       await paperEmbeddingsCreate({ paper })
     }
 
