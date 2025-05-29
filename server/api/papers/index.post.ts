@@ -9,7 +9,7 @@ import * as os from "node:os"
 import * as tar from "tar"
 import { uuidv7 } from "uuidv7"
 import { z } from "zod"
-import { eq } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 
 import { spawn } from "child_process"
 import { fileURLToPath } from "url"
@@ -91,43 +91,30 @@ async function arxivPaperDownload({
 
     console.log(data)
 
+    //! This should be handled in a more general way, e.g. by checking the schema
     if (data.feed.entry.id === "http://arxiv.org/api/errors#incorrect_id_format_for_1707.08567a") {
       continue
     }
 
     // hurraayy we found a paper
+    const authorArray = Array.isArray(data.feed.entry.author)
+      ? data.feed.entry.author
+      : [data.feed.entry.author]
+
     const foundPaper = {
       title: data.feed.entry.title,
-      authors: data.feed.entry.author.map((author) => author.name).join(", "),
+      authors: authorArray.map((author) => author.name).join(", "),
       abstract: data.feed.entry.summary,
       onlineUrl: `http://arxiv.org/abs/${arxivId}`,
     }
 
-    // download the source from arxiv
-    const sourceUrl = foundPaper.onlineUrl.replace("abs", "src")
-    const sourceRes = await fetch(sourceUrl)
-    if (!sourceRes.ok) {
-      console.error(`Failed to download source from ${sourceUrl}: ${sourceRes.statusText}`)
+    // Use the new helper function to download source
+    const extractedSourceDir = await downloadArxivSource(arxivId)
+
+    if (!extractedSourceDir) {
+      console.error(`Failed to download source for arXiv ID ${arxivId}`)
       continue
     }
-    // The source is a tar.gz file, we need to extract it to a temporary directory
-    const sourceBuffer = await sourceRes.arrayBuffer()
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), `arxiv-${arxivId}-`))
-    const tarGzPath = path.join(tempDir, `${arxivId}.tar.gz`)
-
-    // Write the tar.gz file to temp directory
-    await fs.writeFile(tarGzPath, Buffer.from(sourceBuffer))
-
-    // Extract the tar.gz file
-    await tar.extract({
-      file: tarGzPath,
-      cwd: tempDir,
-    })
-
-    // Remove the tar.gz file after extraction
-    await fs.unlink(tarGzPath)
-
-    const extractedSourceDir = tempDir
 
     // TODO: validate the found paper data using e.g. zod
 
@@ -348,10 +335,8 @@ export async function paperReferencesInsertMany(
 
   // Process each reference to find/insert ArXiv papers and get their IDs
   const valuesToInsertPromises = references.map(async (ref) => {
-    //! TODO: Needs to be reimplemented
-    //const referencedPaperId = await processReferenceWithArxivId(ref, "/tmp/ref_papers")
-    // Set referencePaperId to null instead of a non-existent ID
-    const referencedPaperId = null
+    // Process reference to find/insert ArXiv papers
+    const referencedPaperId = await processReferenceWithArxivId(ref)
 
     // Separate known fields from the rest to store in 'fields'
     const { id, type, title, authors, raw_bibtex, ...otherFields } = ref
@@ -387,154 +372,191 @@ export async function paperReferencesInsertMany(
   }
 }
 
-//   // Temporary folder
-//   const tempDir = os.tmpdir()
-//   const filePath = join(tempDir, fileName)
-//   await fs.writeFile(filePath, fileBuffer)
+/**
+ * ARXIV REFERENCE PROCESSING FUNCTIONS
+ *
+ * These functions handle the recursive processing of arXiv papers found in references:
+ * 1. findArxivIdInReference - Searches reference fields for arXiv IDs
+ * 2. findPaperByArxivId - Checks if paper already exists in database
+ * 3. insertPaperFromArxivId - Downloads and inserts new arXiv papers
+ * 4. downloadArxivSource - Downloads LaTeX source from arXiv
+ * 5. processReferenceWithArxivId - Main processing logic for references
+ */
 
-//   console.log(`Saved uploaded file temporarily to ${filePath}`)
-//   console.log(`Title: ${title || "Not provided"}, Authors: ${authors || "Not provided"}`)
+// Helper function to find the ArXiv ID in reference fields
+function findArxivIdInReference(reference: ReferenceInput): string | null {
+  const pattern = /\d{4}\.\d{5}/
+  const fieldsToSearch = [
+    reference.title,
+    reference.authors,
+    reference.raw_bibtex,
+    ...Object.values(reference).filter((v) => typeof v === "string"),
+  ]
 
-//   let arxivPaperId = ""
-//   let abstract = ""
-//   let paperUrl = ""
-//   let published = ""
-//   let updated = ""
-//   let markdownContent = ""
-//   let references: Record<string, any>[] = []
-//   let processReferences = true
+  for (const field of fieldsToSearch) {
+    if (!field) continue
+    const match = field.match(pattern)
+    if (match) return match[0]
+  }
+  return null
+}
 
-//   const arxivPaperMetadata = await getArxivMetadata(filePath)
-//   if (arxivPaperMetadata?.arxiv_id) {
-//     arxivPaperId = arxivPaperMetadata.arxiv_id || ""
-//     title = arxivPaperMetadata.title || title
-//     authors = arxivPaperMetadata.authors || authors
-//     abstract = arxivPaperMetadata.abstract || ""
-//     paperUrl = arxivPaperMetadata.url || ""
-//     published = arxivPaperMetadata.published_date || ""
-//     updated = arxivPaperMetadata.updated_date || ""
+// Helper function to find existing paper by ArXiv ID
+async function findPaperByArxivId(arxivId: string): Promise<typeof papers.$inferSelect | null> {
+  const paper = await useDrizzle()
+    .select()
+    .from(papers)
+    .where(sql`${papers.onlineUrl} LIKE ${"%" + arxivId + "%"}`)
+    .limit(1)
 
-//     // create a temporary directory for the paper source
-//     const tempDir = os.tmpdir()
+  return paper[0] || null
+}
 
-//     const paperPath = await paperDownloadArxivId(arxivPaperId, tempDir)
-//     let sourceDir = paperPath.endsWith(".pdf") ? paperPath.slice(0, -4) : paperPath
-//     // let sourceDir = join(tempDir, arxivPaperId.replace(".", ""))
+// Main function to insert a paper from ArXiv ID
+async function insertPaperFromArxivId(
+  arxivId: string,
+  shouldProcessReferences: boolean = true,
+): Promise<string> {
+  try {
+    // Fetch metadata from arXiv API
+    const res = await fetch(`https://export.arxiv.org/api/query?id_list=${arxivId}`)
+    const xml = await res.text()
+    const data = JSON.parse(parser.toJson(xml)) as unknown as z.infer<typeof arxivPaperSchema>
 
-//     // if source dir doesn't exist, use temp_dir as source dir and log error
-//     try {
-//       await fs.access(sourceDir)
-//     } catch (error) {
-//       console.error(`Source directory ${sourceDir} does not exist. Using temp_dir as source dir.`)
-//       sourceDir = tempDir
-//     }
+    // Check for API errors
+    if (data.feed.entry.id === "http://arxiv.org/api/errors#incorrect_id_format_for_1707.08567a") {
+      throw new Error(`Invalid arXiv ID format: ${arxivId}`)
+    }
 
-//     try {
-//       markdownContent = await parseLatexToMarkdown(sourceDir)
-//       console.info(`Parsed LaTeX to Markdown successfully`)
-//     } catch (error) {
-//       console.error(`Failed to parse LaTeX to Markdown: ${error}`)
-//       markdownContent = ""
-//     }
+    // Extract paper metadata
+    const authorArray = Array.isArray(data.feed.entry.author)
+      ? data.feed.entry.author
+      : [data.feed.entry.author]
 
-//     console.info("Extracting references from source directory")
-//     references = await extractReferences(sourceDir)
-//     console.info(`Extracted ${references.length} references`)
-//   } else {
-//     console.info("No arXiv ID found in the uploaded paper")
-//     const paperInfo = await getPaperInfo(filePath)
-//     if (paperInfo) {
-//       title = paperInfo.title || title
-//       authors = paperInfo.authors || authors
-//       abstract = paperInfo.abstract || ""
-//     }
+    const foundPaper = {
+      title: data.feed.entry.title,
+      authors: authorArray.map((author) => author.name).join(", "),
+      abstract: data.feed.entry.summary,
+      onlineUrl: `http://arxiv.org/abs/${arxivId}`,
+    }
 
-//     // TODO Not markdown atm I guess?
-//     markdownContent = await extractTextFromPdf(filePath)
-//     console.info(`Extracted text from PDF successfully`)
-//   }
+    // Download the PDF from arXiv
+    const pdfUrl = `https://arxiv.org/pdf/${arxivId}.pdf`
+    const pdfResponse = await fetch(pdfUrl)
+    if (!pdfResponse.ok) {
+      throw new Error(`Failed to download PDF for arXiv ID ${arxivId}`)
+    }
 
-//   //! TODO Not working atm
-//   if (references.length <= 0) {
-//     console.info("Skipping reference processing")
-//     processReferences = false
-//     // references = await extractReferencesFromFile(filePath)
-//     // console.info(`Extracted ${references.length} references from file`)
-//   }
-//   // Insert the paper into the database
-//   // The paperInsert function handles cases where title or authors are empty
-//   // TODO: Handle case where paper is found, but no references are found
-//   const paperId = await paperInsert(
-//     filePath,
-//     title,
-//     authors,
-//     abstract,
-//     paperUrl,
-//     published,
-//     updated,
-//     markdownContent,
-//   )
+    const pdfBuffer = await pdfResponse.arrayBuffer()
+    const pdfFile = new File([pdfBuffer], `${arxivId}.pdf`, { type: "application/pdf" })
 
-//   if (references.length > 0) {
-//     console.info("Inserting references into the database")
-//     try {
-//       // Map references to ReferenceInput type
-//       const referenceInputs = references.map((ref) => ({
-//         id: ref.id ?? "",
-//         title: ref.title ?? "",
-//         authors: ref.authors ?? "",
-//         raw_bibtex: ref.raw_bibtex ?? "",
-//         ...ref,
-//       }))
-//       await paperReferencesInsertMany(paperId, referenceInputs)
-//     } catch (error) {
-//       console.error("Error inserting references into the database:", error)
-//       throw createError({
-//         statusCode: 500,
-//         statusMessage: "Failed to insert references into the database",
-//       })
-//     }
-//   }
+    // Generate new paper ID and upload to S3
+    const paperId = uuidv7()
+    await useS3Storage().setItemRaw(paperId, pdfFile)
 
-//   // Clean up the temporary file
-//   try {
-//     await fs.unlink(filePath)
-//     console.log(`Temporary file ${filePath} has been deleted`)
-//     // Also clean up the folder with the same path as filePath but without the .pdf extension
-//     const folderPath = filePath.endsWith(".pdf") ? filePath.slice(0, -4) : filePath
-//     try {
-//       await fs.rm(folderPath, { recursive: true, force: true })
-//       console.log(`Temporary folder ${folderPath} has been deleted`)
-//     } catch (folderError) {
-//       // It's ok if the folder doesn't exist
-//       if (
-//         typeof folderError === "object" &&
-//         folderError !== null &&
-//         "code" in folderError &&
-//         (folderError as any).code !== "ENOENT"
-//       ) {
-//         console.error(`Failed to delete temporary folder ${folderPath}:`, folderError)
-//       }
-//     }
-//   } catch (unlinkError) {
-//     console.error(`Failed to delete temporary file ${filePath}:`, unlinkError)
-//   }
+    const fileHash = await fileToSHA256Hash(pdfFile)
+    const fileUrl = `${process.env.NUXT_S3_ENDPOINT}/${process.env.NUXT_S3_BUCKET}/${paperId}`
 
-//   return {
-//     success: true,
-//     paperId,
-//     message: "Paper uploaded successfully",
-//   }
-// } catch (error: any) {
-//   console.error("Error handling paper upload:", error)
+    // Insert paper into database
+    const [paper] = await useDrizzle()
+      .insert(papers)
+      .values({
+        id: paperId,
+        title: foundPaper.title,
+        authors: foundPaper.authors,
+        abstract: foundPaper.abstract,
+        fileHash: fileHash,
+        fileUrl: fileUrl,
+        onlineUrl: foundPaper.onlineUrl,
+      })
+      .returning()
 
-//   // Handle specific error types if needed
-//   if (error.statusCode) {
-//     throw error // Pass through H3 errors with status codes
-//   }
+    if (!paper) throw new Error(`Failed to insert paper for arXiv ID ${arxivId}`)
 
-//   throw createError({
-//     statusCode: 500,
-//     statusMessage: `Failed to upload paper: ${error.message || "Unknown error"}`,
-//   })
-// }
+    console.info(`Successfully inserted paper ${paper.id} for arXiv ID ${arxivId}`)
+
+    // Download source and process if needed
+    if (shouldProcessReferences) {
+      try {
+        const sourceDir = await downloadArxivSource(arxivId)
+        if (sourceDir) {
+          await arxivPaperReferences({ paper }, sourceDir)
+          const markdownContent = await paperLaTeXToMarkdown({ paper }, sourceDir)
+          await paperEmbeddingsMarkdownCreate({ paper }, markdownContent)
+        } else {
+          await paperEmbeddingsCreate({ paper })
+        }
+      } catch (error) {
+        console.error(`Error processing references for arXiv ${arxivId}:`, error)
+        // Continue without failing - create embeddings from PDF
+        await paperEmbeddingsCreate({ paper })
+      }
+    } else {
+      // Just create embeddings without processing references
+      await paperEmbeddingsCreate({ paper })
+    }
+
+    return paperId
+  } catch (error) {
+    console.error(`Failed to insert paper from arXiv ID ${arxivId}:`, error)
+    throw error
+  }
+}
+
+// Helper function to download arXiv source
+async function downloadArxivSource(arxivId: string): Promise<string> {
+  try {
+    const sourceUrl = `https://arxiv.org/src/${arxivId}`
+    const sourceRes = await fetch(sourceUrl)
+    if (!sourceRes.ok) {
+      console.error(`Failed to download source from ${sourceUrl}: ${sourceRes.statusText}`)
+      return ""
+    }
+
+    const sourceBuffer = await sourceRes.arrayBuffer()
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), `arxiv-${arxivId}-`))
+    const tarGzPath = path.join(tempDir, `${arxivId}.tar.gz`)
+
+    await fs.writeFile(tarGzPath, Buffer.from(sourceBuffer))
+
+    await tar.extract({
+      file: tarGzPath,
+      cwd: tempDir,
+    })
+
+    await fs.unlink(tarGzPath)
+
+    return tempDir
+  } catch (error) {
+    console.error(`Error downloading arXiv source for ${arxivId}:`, error)
+    return ""
+  }
+}
+
+// Process reference to find and insert ArXiv papers
+async function processReferenceWithArxivId(reference: ReferenceInput): Promise<string | null> {
+  try {
+    // Search for ArXiv ID in reference fields
+    const arxivId = findArxivIdInReference(reference)
+    if (!arxivId) return null
+
+    console.info(`Found arXiv ID ${arxivId} in reference: ${reference.id}`)
+
+    // Check if paper already exists in database
+    const existingPaper = await findPaperByArxivId(arxivId)
+    if (existingPaper) {
+      console.info(`Paper for arXiv ID ${arxivId} already exists: ${existingPaper.id}`)
+      return existingPaper.id
+    }
+
+    // Insert new paper WITHOUT processing its references to avoid recursion
+    console.info(`Inserting new paper for arXiv ID ${arxivId}`)
+    const newPaperId = await insertPaperFromArxivId(arxivId, false)
+    return newPaperId
+  } catch (error) {
+    console.error(`Error processing reference with arXiv ID:`, error)
+    return null
+  }
+}
+
+// Helper
