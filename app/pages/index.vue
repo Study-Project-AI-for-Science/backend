@@ -2,8 +2,12 @@
 import { CloudUploadIcon, RabbitIcon, SearchIcon } from "lucide-vue-next"
 
 const query = ref("")
+const debouncedQuery = refDebounced(query, 300)
 
-const { data, refresh } = await useFetch(`/api/papers`)
+const { data, refresh } = await useFetch(`/api/papers`, {
+  query: computed(() => ({ search: debouncedQuery.value })),
+  watch: [debouncedQuery]
+})
 
 const papers = computed(() => data.value?.papers)
 
@@ -33,8 +37,28 @@ function uploadPaper() {
   open()
 }
 
-// auto refresh every second
-useIntervalFn(refresh, 1000)
+// Intelligent auto-refresh: only refresh when no search query is active
+// This allows users to see newly uploaded papers without spamming API during search
+const { pause, resume } = useIntervalFn(() => {
+  // Only refresh if there's no active search query
+  if (!debouncedQuery.value.trim()) {
+    refresh()
+  }
+}, 5000) // Refresh every 5 seconds when idle
+
+// Pause auto-refresh when user is actively searching
+watch(debouncedQuery, (newQuery) => {
+  if (newQuery.trim()) {
+    pause()
+  } else {
+    // Resume auto-refresh after a brief delay when search is cleared
+    setTimeout(() => {
+      if (!debouncedQuery.value.trim()) {
+        resume()
+      }
+    }, 1000)
+  }
+})
 </script>
 
 <template>
@@ -89,8 +113,15 @@ useIntervalFn(refresh, 1000)
             <div class="mb-4 rounded-md bg-gray-100 p-2">
               <RabbitIcon class="h-12 w-12 stroke-[1.5px] text-gray-500" />
             </div>
-            <h2 class="mb-2 text-lg font-medium text-gray-700">No papers found</h2>
-            <p>Try to change the search query or upload a new paper.</p>
+            <h2 class="mb-2 text-lg font-medium text-gray-700">
+              {{ debouncedQuery ? 'No matching papers found' : 'No papers found' }}
+            </h2>
+            <p>
+              {{ debouncedQuery 
+                ? 'Try adjusting your search terms or upload a new paper.' 
+                : 'Try to change the search query or upload a new paper.' 
+              }}
+            </p>
           </div>
         </div>
       </div>
