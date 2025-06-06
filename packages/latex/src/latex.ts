@@ -99,20 +99,13 @@ async function parseLatexToMarkdown(filePath: string): Promise<string> {
     const workingDir = path.dirname(filePath)
     const fileName = path.basename(filePath)
 
-    // Store current directory
-    const originalDir = process.cwd()
+    // Execute pandoc command
+    const { stdout } = await execAsync(
+      `pandoc -f latex -t markdown "${fileName}"`,
+      { cwd: workingDir }
+    )
+    return stdout
 
-    // Change to the LaTeX file's directory
-    process.chdir(workingDir)
-
-    try {
-      // Execute pandoc command
-      const { stdout } = await execAsync(`pandoc -f latex -t markdown "${fileName}"`)
-      return stdout
-    } finally {
-      // Always change back to original directory
-      process.chdir(originalDir)
-    }
   } catch (error) {
     throw new Error(
       `LaTeX to Markdown conversion failed: ${error instanceof Error ? error.message : String(error)}`,
