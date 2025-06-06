@@ -4,7 +4,6 @@ import { z } from "zod"
 import { nanoid } from "nanoid"
 import { readValidatedBody, createError } from "h3"
 import { useDrizzle } from "../utils/drizzle"
-import { setUserSession, verifyPassword } from "#imports"
 
 const bodySchema = z.object({
   email: z.string().email(),

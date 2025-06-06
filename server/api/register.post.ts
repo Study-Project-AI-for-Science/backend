@@ -3,7 +3,6 @@ import { eq } from "drizzle-orm"
 import { z } from "zod"
 import { readValidatedBody, createError } from "h3"
 import { useDrizzle } from "../utils/drizzle"
-import { hashPassword } from "#imports"
 
 const bodySchema = z.object({
   name: z.string(),
