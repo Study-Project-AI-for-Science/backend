@@ -1,6 +1,11 @@
 const publicRoutes = ["/login", "/register", "/logout"]
 
 export default defineNuxtRouteMiddleware(async (to) => {
+  // Skip authentication in development mode
+  if (process.dev) {
+    return
+  }
+
   const session = useUserSession()
 
   if (!session.ready.value) {
