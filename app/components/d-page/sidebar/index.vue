@@ -9,7 +9,7 @@ const organisationName = ref("AI for Science")
 const collapsed = useSessionStorage("collapsed", false)
 
 const isPublicRoute = computed(() => {
-  return ["/login", "/logout"].includes(route.path)
+  return ["/login", "/logout", "/register"].includes(route.path)
 })
 
 const mobileMenu = ref(false)

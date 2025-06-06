@@ -88,8 +88,8 @@ def _initialize_module():
 if not os.getenv("PYTEST_RUNNING"):
     try:
         _initialize_module()
-    except Exception as e:
-        # logger.error(f"Module initialization failed: {e}")
+    except Exception:
+        # logger.error("Module initialization failed")
         pass
 
 # --- Helper Functions ---
@@ -118,8 +118,8 @@ def _send_embed_request_to_ollama(input_text: str, model: str) -> Optional[List[
             if not response or "embedding" not in response:
                 raise ValueError(f"Invalid embedding response: {response}")
             return response["embedding"]
-        except Exception as e:
-            # logger.error(f"Ollama.embed request failed (attempt {attempt + 1}/{OLLAMA_MAX_RETRIES}): {e}")
+        except Exception:
+            # logger.error(f"Ollama.embed request failed (attempt {attempt + 1}/{OLLAMA_MAX_RETRIES})")
             if attempt < OLLAMA_MAX_RETRIES - 1:
                 time.sleep(OLLAMA_RETRY_DELAY)
     # logger.error(f"Ollama.embed request failed after {OLLAMA_MAX_RETRIES} attempts.")
@@ -162,8 +162,8 @@ def get_paper_embeddings(pdf_path: str) -> Dict[str, List[List[float]]]:
         raise
     except TokenizerNotAvailableError:
         raise
-    except Exception as e:
-        # logger.error(f"Error in get_paper_embeddings: {e}")
+    except Exception:
+        # logger.error("Error in get_paper_embeddings")
         raise
 
 
@@ -195,7 +195,6 @@ def get_paper_info(file_path: str) -> dict:  #!TODO: Need to implement this func
       Exception:  For any other errors during processing
     """
 
-    logger.info(f"Returning fake metadata for paper: {file_path}")
     return {
         "title": "Sample Academic Paper Title",
         "authors": ["John Doe", "Jane Smith", "Alex Johnson"],
@@ -259,6 +258,6 @@ def get_paper_info(file_path: str) -> dict:  #!TODO: Need to implement this func
         )
 
         return resp.model_dump()
-    except Exception as e:
-        # logger.error(f"Error generating paper info for {file_path}: {e}")
-        raise e
+    except Exception:
+        # logger.error(f"Error generating paper info for {file_path}")
+        raise
