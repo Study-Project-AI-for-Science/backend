@@ -1,37 +1,39 @@
-# Use Python 3.12 as base image
-FROM python:3.12-slim
+# syntax=docker/dockerfile:1
 
-# Set working directory in the container
+### Build stage
+FROM oven/bun:1 AS builder
 WORKDIR /app
 
-# Set only essential environment variables
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    FLASK_APP=run.py \
-    FLASK_ENV=production \
-    GUNICORN_WORKERS=4
+# Install Node dependencies
+COPY bun.lock package.json ./
+RUN bun install --frozen-lockfile
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    python3-dev \
-    libpq-dev \
-    pandoc \
-    && rm -rf /var/lib/apt/lists/*
+# Copy source files and build the Nuxt application
+COPY . .
+RUN bun run build
 
-# Copy project files
-COPY pyproject.toml .
-COPY app/ app/
-COPY modules/ modules/
-COPY scripts/ scripts/
-COPY run.py .
-COPY README.md .
+### Runtime stage
+FROM python:3.12-slim
 
-# Install Python dependencies
+# Install required system packages and Bun
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL https://bun.sh/install | bash \
+    && mv /root/.bun/bin/bun /usr/local/bin/bun
+
+WORKDIR /app
+
+# Copy application from the builder stage
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/.output ./.output
+COPY --from=builder /app/package.json ./package.json
+
+# Copy Python sources and install dependencies
+COPY pyproject.toml uv.lock ./
+COPY modules ./modules
 RUN pip install --no-cache-dir .
 
-# Expose the port the app runs on
-EXPOSE 5000
+EXPOSE 3000
 
-# Command to run the application
-CMD ["sh", "-c", "python scripts/run_migrations.py && python scripts/create_bucket.py && gunicorn -w ${GUNICORN_WORKERS} --timeout 120 -b 0.0.0.0:5000 'app:create_app()'"]
+# Run the built Nuxt application
+CMD ["bun", "run", "preview"]

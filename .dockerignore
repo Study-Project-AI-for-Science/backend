@@ -52,3 +52,8 @@ tests/
 docs/
 *.md
 !README.md
+
+# Node build artifacts
+node_modules/
+.nuxt/
+.output/
