@@ -211,6 +211,138 @@ function cleanBibtexValue(value: string): string {
   return value.replace(/\s+/g, " ").trim()
 }
 
+const BIBITEM_PATTERN =
+  /\\bibitem(?:\[(.*?)])?\{(.*?)\}(.*?)(?=\\bibitem|\\end\{thebibliography\}|$)/gs
+
+function parseBibitemContent(body: string): Partial<ReferenceEntry> {
+  const rawText = body.replace(/\s+/g, " ").trim()
+
+  /* split on real new lines and newblock */
+  const logicalLines = body
+    .replace(/\\newblock\s*/gi, "\n")
+    .split(/\r?\n+/)
+    .map(l => l.trim())
+    .filter(Boolean)
+
+  const fields: Partial<ReferenceEntry> = { raw_text: rawText }
+
+  if (logicalLines.length > 0) {
+    fields.author = logicalLines[0]?.replace(/\.$/, "")
+  }
+
+  if (logicalLines.length > 1) {
+    fields.title = logicalLines[1]?.replace(/\.$/, "")
+  }
+
+  /* journal heuristics */
+  const journalPatterns = [
+    /\\textit{([^}]+)}/,
+    /\\emph{([^}]+)}/,
+    /{\\em\s+([^}]+)}/,
+    /\\em\s+([^,\.]+)/,
+    /In\s+{\\\w+\s+([^}]+)}/,
+    /In\s+\\textit{([^}]+)}/,
+    /In\s*["']([^"']+)["']/,
+    /(?:In |in ){\\it ([^}]+)}/,
+    /(?:\.)\s+([A-Z][^,\.]*(?:Journal|Proceedings|Transactions|Review|Letters)[^,\.]*)/,
+  ]
+  for (const p of journalPatterns) {
+    const m = p.exec(rawText)
+    if (m) {
+      fields.journal = m[1].trim()
+      break
+    }
+  }
+
+  /* conference / booktitle heuristics */
+  if (!fields.journal) {
+    const booktitlePatterns = [
+      /In\s+(?:proceedings\s+of|proc\.\s+of|Proc\.\s+of)\s+the\s+([^,\.]+)/i,
+      /In\s+([^,\.]*(?:Conference|Symposium|Workshop)[^,\.]*)/i,
+    ]
+    for (const p of booktitlePatterns) {
+      const m = p.exec(rawText)
+      if (m) {
+        fields.booktitle = m[1].trim()
+        break
+      }
+    }
+  }
+
+  /* publisher */
+  const publisherPatterns = [
+    /(?:publisher|Publisher)\s*[:=]\s*([^,\.]+)/,
+    /([^,\.]+?(?:Press|Publishers|Publishing))/,
+  ]
+  for (const p of publisherPatterns) {
+    const m = p.exec(rawText)
+    if (m) {
+      fields.publisher = m[1].trim()
+      break
+    }
+  }
+
+  /* year, volume, number, pages */
+  fields.year  = /\b(19|20)\d{2}\b/.exec(rawText)?.[0]
+  fields.volume = /(?:volume|Vol\.)\s*[:=]?\s*(\d+)/i.exec(rawText)?.[1]
+  fields.number =
+    /(?:number|No\.|issue)\s*[:=]?\s*(\d+)/i.exec(rawText)?.[1] ?? undefined
+  const pg = /(?:pages|pp\.)\s*[:=]?\s*([\d\-–—]+)/i.exec(rawText)?.[1]
+  if (pg) fields.pages = pg.replace(/[–—]/g, "-")
+
+  /* identifiers */
+  fields.doi =
+    /doi\s*[:=]\s*([^\s,]+)/i.exec(rawText)?.[1] ??
+    /https?:\/\/(?:dx\.)?doi\.org\/([^\s,]+)/i.exec(rawText)?.[1]
+  fields.url =
+    /\\url{([^}]+)}/.exec(rawText)?.[1] ?? /https?:\/\/[^\s,}]+/.exec(rawText)?.[0]
+  fields.arxiv =
+    /arXiv:([^\s,}]+)/i.exec(rawText)?.[1] ??
+    /https?:\/\/arxiv\.org\/abs\/([^\s,}]+)/i.exec(rawText)?.[1]
+
+  /* address/location */
+  const addrPatterns = [
+    /address\s*[:=]\s*([^,\.]+)/,
+    /([A-Z][a-zA-Z]+,\s+[A-Z]{2,})/,
+    /([A-Z][a-zA-Z]+,\s+[A-Z][a-zA-Z]+)/,
+  ]
+  for (const p of addrPatterns) {
+    const m = p.exec(rawText)
+    if (m) {
+      fields.address = m[1].trim()
+      break
+    }
+  }
+
+  /* book heuristic */
+  if (/\\textit{[^}]*book[^}]*/i.test(rawText) && !fields.journal)
+    fields.type = "book"
+
+  return fields
+}
+
+/**
+ * LaTeX bibliography parser (handles \bibitem blocks)
+ */
+function parseLatexBibliographyContent(content: string): ReferenceEntry[] {
+  const entries: ReferenceEntry[] = []
+  let m
+  while ((m = BIBITEM_PATTERN.exec(content)) !== null) {
+    const [, optLabel, citeKey, body] = m
+    const entry: ReferenceEntry = {
+      id: citeKey?.trim() || "",
+      type: "bibitem",
+      ...(optLabel ? { label: optLabel.trim() } : {}),
+      ...parseBibitemContent(body.trim()),
+    }
+    entry.raw_bibitem = optLabel
+      ? `\\bibitem[${optLabel}] {${citeKey}} ${body.trim()}`
+      : `\\bibitem{${citeKey}} ${body.trim()}`
+    entries.push(entry)
+  }
+  return entries
+}
+
 /**
  * Extract references from a paper directory
  */
@@ -240,24 +372,34 @@ async function extractReferences(paperDir: string): Promise<ReferenceEntry[]> {
     }
   }
 
-  // If no BibTeX files found, try TeX files with bibliography sections
+  // If no BibTeX files found, check LaTeX files for \bibitem blocks
   if (!foundBibtex) {
     const texFiles = await findFiles(paperDir, ".tex")
+    let foundAny = false
 
     for (const filePath of texFiles) {
       try {
-        const content = await fs.readFile(filePath, { encoding: "utf-8" })
+        const content = await fs.readFile(filePath, "utf-8")
 
-        if (content.includes("\\bibitem") || content.includes("\\begin{thebibliography}")) {
-          // Here we would insert a simplified bibliography parser
-          console.log(`Found bibliography in LaTeX file: ${filePath}`)
-          // Simplified bibliography parsing would go here
+        if (content.includes("\\bibitem")) {
+          const entries = parseLatexBibliographyContent(content)
+          entries.forEach(e => (entriesMap[e.id] = e))
+          if (entries.length) foundAny = true
+          console.log(
+            `Parsed ${entries.length} entries from LaTeX file: ${filePath}`,
+          )
         }
       } catch (error) {
         console.error(
-          `Error reading LaTeX file ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+          `Error reading LaTeX file ${filePath}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
         )
       }
+    }
+
+    if (!foundAny) {
+      console.warn(`No bibliography sources found in ${paperDir}`)
     }
   }
 
