@@ -1,4 +1,5 @@
 import { papers, paperEmbeddings, paperReferences } from "~~/packages/database/schema"
+import { parseLatexToMarkdown, extractReferences } from "~~/packages/latex/src/latex"
 import { extractText, getDocumentProxy } from "unpdf"
 import parser from "xml2json"
 
@@ -194,16 +195,13 @@ async function arxivPaperReferences(
   { paper }: { paper: typeof papers.$inferInsert },
   sourceDir: string,
 ) {
-  const references = await runPythonScript<Record<string, any>[]>("extract_references", {
-    source_dir: sourceDir,
-  })
+  const references = await extractReferences(sourceDir)
 
   if (references.length > 0) {
     console.info("Inserting references into the database")
     try {
       // Map references to ReferenceInput type
       const referenceInputs = references.map((ref) => ({
-        id: ref.id ?? "",
         title: ref.title ?? "",
         authors: ref.authors ?? "",
         raw_bibtex: ref.raw_bibtex ?? "",
@@ -216,27 +214,23 @@ async function arxivPaperReferences(
   }
 }
 
-// For now implemented the python script to convert LaTeX to Markdown
-// TODO implement this in JavaScript/TypeScript directly
 async function paperLaTeXToMarkdown(
   { paper }: { paper: typeof papers.$inferInsert },
   sourceDir: string,
 ): Promise<string> {
   
-  const result = await runPythonScript<{ markdown: string }>("parse_latex_to_markdown", {
-    path: sourceDir,
-  })
+  const result = await parseLatexToMarkdown(sourceDir)
 
   // Update the paper in the database with the markdown content
   await useDrizzle()
     .update(papers)
     .set({
-      content: result?.markdown ?? ""
+      content: result ?? ""
     })
     .where(eq(papers.id, paper.id!))
 
   console.info(`Updated paper ${paper.id} with markdown content`)
-  return result?.markdown ?? "" // Return the markdown string or empty string if result is null/undefined
+  return result ?? "" // Return the markdown string or empty string if result is null/undefined
 }
 
 async function paperEmbeddingsCreate({ paper }: { paper: typeof papers.$inferInsert }) {
