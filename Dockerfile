@@ -44,6 +44,7 @@ ENV NODE_ENV=production \
 RUN apk add --no-cache \
     curl \
     netcat-openbsd \
+    pandoc \
     && rm -rf /var/cache/apk/*
 
 # Create non-root user
