@@ -36,6 +36,7 @@ export const papers = pgTable("papers", {
   abstract: text(),
   onlineUrl: text(),
   content: text(),
+  documentExtractionResult: jsonb(),
   publishedDate: timestamp({ withTimezone: true }),
   ...timestamps,
 })
