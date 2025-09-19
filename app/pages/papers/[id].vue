@@ -6,12 +6,9 @@ import DOMPurify from "dompurify"
 const route = useRoute()
 const paperId = route.params.id
 
-const config = useRuntimeConfig()
-
-const { data: paper, refresh } = await useFetch(`/api/papers/${paperId}`)
-const { data: references, refresh: refreshReferences } = await useFetch(
-  `/api/papers/${paperId}/references`,
-)
+const paper = computed(() => {
+  return paperData.find((paper) => paper.id === paperId)
+})
 
 function markdownToHtml(markdown: string) {
   if (!markdown) return ""
@@ -20,12 +17,6 @@ function markdownToHtml(markdown: string) {
   const sanitizedHtml = DOMPurify.sanitize(html)
   return sanitizedHtml
 }
-
-// auto refresh
-useIntervalFn(async () => {
-  await refresh()
-  await refreshReferences()
-}, 1000)
 </script>
 
 <template>
@@ -64,7 +55,7 @@ useIntervalFn(async () => {
           <!-- <pre>{{ references }}</pre> -->
           <div class="flex flex-col gap-2">
             <div
-              v-for="reference in references"
+              v-for="reference in paper.references"
               class="flex flex-col gap-2 rounded-md bg-gray-100 p-2"
             >
               <div class="font-semibold">{{ reference.title }}</div>

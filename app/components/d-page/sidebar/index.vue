@@ -30,7 +30,7 @@ onBeforeRouteUpdate(() => {
       <div
         class="group flex h-14 w-full cursor-default items-center justify-between gap-2 rounded-md p-2 px-2 text-sm text-gray-800"
       >
-        <NuxtLink to="/entries" v-show="!collapsed" class="flex items-center gap-2 px-2 py-1.5">
+        <NuxtLink to="/" v-show="!collapsed" class="flex items-center gap-2 px-2 py-1.5">
           <!-- <SaveIcon class="size-4" /> -->
           <!-- <img src="/file_folder_color.svg" class="size-5" /> -->
           <div class="line-clamp-1 flex-1">{{ organisationName }}</div>

@@ -8,30 +8,34 @@ import {
   FolderIcon,
   FoldersIcon,
   FileIcon,
+  SearchCheckIcon,
+  WaypointsIcon,
+  HomeIcon,
+  TrashIcon,
 } from "lucide-vue-next"
 import { useSessionStorage } from "@vueuse/core"
 
 const route = useRoute()
 
 const links = [
-  // {
-  //   name: "Search",
-  //   to: "/search",
-  //   icon: FileIcon,
-  // },
   {
-    name: "Papers",
+    name: "Home",
     to: "/",
-    icon: FileIcon,
+    icon: HomeIcon,
+  },
+  {
+    name: "Citation Checker",
+    to: "/citation-checker",
+    icon: SearchCheckIcon,
+  },
+  {
+    name: "Argumentation Graph",
+    to: "/argumentation-graph",
+    icon: WaypointsIcon,
   },
 ]
 
 const footerLinks = [
-  // {
-  //   name: "Einstellungen",
-  //   to: "/settings",
-  //   icon: Settings2Icon
-  // },
   {
     name: "Sign out",
     to: "/logout",
@@ -48,6 +52,15 @@ const emit = defineEmits(["close"])
 function close() {
   emit("close")
 }
+
+const papers = ref(paperData)
+
+function isLinkActive(link: string) {
+  if (link === "/") {
+    return route.path === link
+  }
+  return route.path.startsWith(link)
+}
 </script>
 
 <template>
@@ -55,10 +68,9 @@ function close() {
     <div
       class="group flex h-9 cursor-default items-center justify-between gap-2 rounded-md text-sm text-gray-700"
     >
-      <div v-show="!collapsed" class="flex items-center gap-2 px-2 py-2">
-        <!-- <img src="/file_folder_color.svg" class="size-5" /> -->
+      <NuxtLink to="/" v-show="!collapsed" class="flex items-center gap-2 px-2 py-2">
         <div class="line-clamp-1 leading-[1em] font-medium">{{ organisationName }}</div>
-      </div>
+      </NuxtLink>
       <div
         class="hidden items-center rounded-md p-2 hover:bg-gray-200 sm:flex"
         :class="collapsed ? '' : 'opacity-0 group-hover:opacity-100'"
@@ -74,14 +86,30 @@ function close() {
     <hr class="mt-1 mb-1.5 text-gray-200" />
     <NuxtLink
       v-for="link in links"
-      class="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm text-gray-500 hover:bg-gray-200"
+      class="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-200"
       :to="link.to"
-      :class="route.path.startsWith(link.to) ? 'bg-gray-200 text-gray-700' : ''"
+      :class="isLinkActive(link.to) ? 'bg-gray-200' : ''"
     >
       <div class="flex h-5 items-center justify-center">
         <component :is="link.icon" class="size-4" />
       </div>
-      <div class="" v-show="!collapsed">{{ link.name }}</div>
+      <div v-show="!collapsed">{{ link.name }}</div>
+    </NuxtLink>
+    <hr class="mt-1 mb-1.5 text-gray-200" />
+    <div class="mb-2 ml-2 text-xs font-medium text-gray-500">Recent papers</div>
+    <NuxtLink
+      v-for="paper in papers"
+      class="group flex cursor-default items-center gap-2 rounded-md py-0.5 pr-1 pl-2 text-sm text-gray-500 hover:bg-gray-200"
+      :to="`/papers/${paper.id}`"
+      :class="route.path.startsWith(`/papers/${paper.id}`) ? 'bg-gray-200 text-gray-700' : ''"
+    >
+      <div class="flex h-5 items-center justify-center">
+        <FileIcon class="size-4" />
+      </div>
+      <div v-show="!collapsed" class="line-clamp-1">{{ paper.title }}</div>
+      <div class="opacity-0 group-hover:opacity-100">
+        <DButton :icon-left="TrashIcon" variant="transparent" class="!px-1.5" />
+      </div>
     </NuxtLink>
   </nav>
 
