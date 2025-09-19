@@ -2,7 +2,7 @@ import tailwindcss from "@tailwindcss/vite"
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  compatibilityDate: "2025-03-26",
+  compatibilityDate: "latest",
   devtools: { enabled: false },
   css: ["@/assets/main.css"],
   future: { compatibilityVersion: 4 },
@@ -16,6 +16,12 @@ export default defineNuxtConfig({
     s3Region: process.env.NUXT_S3_REGION,
 
     appUrl: "http://localhost:3000",
+  },
+
+  app: {
+    head: {
+      title: "Study Project: AI for Science",
+    },
   },
 
   modules: ["nuxt-auth-utils", "@vueuse/nuxt"],

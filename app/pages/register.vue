@@ -1,35 +1,92 @@
 <script setup lang="ts">
-const form = reactive({ name: '', email: '', password: '' })
-const loading = ref(false)
+definePageMeta({
+  layout: false,
+})
 
-async function submit() {
-  loading.value = true
+const email = ref("")
+const password = ref("")
+const errorMessage = ref("") // Add error message
+const success = ref(false)
+const loading = ref(false) // Add loading state
+
+async function register() {
   try {
-    await $fetch('/api/register', { method: 'POST', body: form })
-    await navigateTo('/login')
-  } catch (err) {
-    console.error(err)
-    alert('Registration failed')
+    loading.value = true // Set loading to true
+    errorMessage.value = "" // Reset error message
+    success.value = false // Reset success
+
+    await $fetch("/api/register", {
+      method: "POST",
+      body: {
+        email: email.value,
+        password: password.value,
+      },
+    })
+    success.value = true
+  } catch (e: any) {
+    // Catch the error to display to user
+    errorMessage.value = e.data?.message || "An error occurred." // Access error message. Use a generic message if not available
   } finally {
-    loading.value = false
+    loading.value = false // Set loading back to false
   }
 }
 </script>
 
 <template>
-  <DPage>
-    <DPageEmpty>
-      <form @submit.prevent="submit" class="flex w-full max-w-xs flex-col gap-2">
-        <h1 class="mb-2 text-xl font-semibold">Register</h1>
-        <DLabel>Name</DLabel>
-        <DInput v-model="form.name" />
-        <DLabel>Email</DLabel>
-        <DInput v-model="form.email" type="email" />
-        <DLabel>Password</DLabel>
-        <DInput v-model="form.password" type="password" />
-        <DButton type="submit" :loading="loading" textCenter>Register</DButton>
-        <NuxtLink class="text-blue-600" to="/login">Back to login</NuxtLink>
+  <div class="min-h-screen bg-neutral-100 px-8 pt-24">
+    <div class="mx-auto max-w-sm rounded-lg border border-neutral-50 bg-white p-8 shadow">
+      <h1 class="mb-4 text-center text-2xl font-semibold text-neutral-900">Register</h1>
+
+      <div v-if="success">
+        <h2 class="text-center text-lg font-semibold text-green-600">Successfully registered!</h2>
+        <p class="text-center text-sm text-neutral-500">
+          Please check your email for the confirmation link.
+        </p>
+        <p class="mt-4 text-center text-sm text-neutral-500">
+          <NuxtLink to="/login" class="hover:underline">Sign In</NuxtLink>
+        </p>
+      </div>
+
+      <form v-else @submit.prevent="register" class="flex flex-col gap-4">
+        <div class="flex flex-col gap-1">
+          <d-label for="email">Email</d-label>
+          <d-input
+            v-model="email"
+            type="email"
+            id="email"
+            name="email"
+            required
+            placeholder="Your email address"
+          />
+        </div>
+        <div class="flex flex-col gap-1">
+          <d-label for="password">Password</d-label>
+          <d-input
+            v-model="password"
+            type="password"
+            id="password"
+            name="password"
+            required
+            placeholder="Your password"
+          />
+        </div>
+        <d-button
+          :loading="loading"
+          type="submit"
+          class="items-center justify-center bg-black text-white"
+        >
+          Register
+        </d-button>
+        <div
+          v-if="errorMessage"
+          class="mb-2 rounded-md bg-red-100 px-4 py-2 text-center text-sm text-red-600"
+        >
+          {{ errorMessage }}
+        </div>
+        <p class="text-center text-sm text-neutral-500">
+          Already registered? <NuxtLink to="/login" class="hover:underline">Sign In</NuxtLink>
+        </p>
       </form>
-    </DPageEmpty>
-  </DPage>
+    </div>
+  </div>
 </template>
