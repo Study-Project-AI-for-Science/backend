@@ -165,7 +165,7 @@ onMounted(() => {
               <div class="font-semibold">{{ reference.title }}</div>
               <div>{{ reference.authors }}</div>
               <div
-                class="rounded-lg bg-yellow-300 px-2.5 py-1 text-yellow-950"
+                class="rounded bg-yellow-300 px-2.5 py-1 text-yellow-950"
                 v-show="activeReferenceId === reference.id"
               >
                 <p>Source: {{ reference.source ?? "N/A" }}</p>
