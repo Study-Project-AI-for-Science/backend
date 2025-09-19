@@ -31,11 +31,11 @@ function markdownToHtml(markdown: string) {
         <div class="flex h-full flex-col gap-4 overflow-auto border-r border-gray-200 p-4 px-6">
           <div class="flex flex-col gap-2">
             <div class="text-xl font-semibold">Title</div>
-            <div>{{ paper.title }}</div>
+            <div class="text-gray-700">{{ paper.title }}</div>
           </div>
           <div class="flex flex-col gap-2">
             <div class="text-xl font-semibold">Abstract</div>
-            <div>{{ paper.abstract }}</div>
+            <div class="text-gray-700">{{ paper.abstract }}</div>
           </div>
           <div class="flex flex-col gap-2">
             <div class="text-xl font-semibold">Online Url</div>
