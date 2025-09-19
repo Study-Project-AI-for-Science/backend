@@ -12,32 +12,53 @@ const paper = computed(() => {
 })
 
 const proseRef = ref<HTMLElement>()
+const activeReferenceId = useRouteQuery<string | null>("rid")
 
 function markdownToHtml(markdown: string) {
   if (!markdown) return ""
   const html = marked(markdown) as string
   // sanitize the html
   const sanitizedHtml = DOMPurify.sanitize(html, {
-    ADD_ATTR: ["data-rid"],
+    ADD_ATTR: ["data-rid", "data-active"],
   })
 
   return sanitizedHtml
 }
 
-let activeReferenceId = ref<string | null>(null)
-
 function handleReferenceClick(rid: string, element: HTMLElement) {
   console.log("Reference clicked:", rid)
   console.log("Element:", element)
+
+  // Toggle the active reference (clicking the same reference again will deactivate it)
+  if (activeReferenceId.value === rid) {
+    activeReferenceId.value = null
+  } else {
+    activeReferenceId.value = rid
+  }
 
   // Find the corresponding reference in the paper
   const reference = paper.value?.references?.find((ref) => ref.id === rid)
   if (reference) {
     console.log("Found reference:", reference)
-    activeReferenceId.value = reference.id
     // You can scroll to the reference in the sidebar, highlight it, etc.
     // For example, you could emit an event, update state, or perform any action
   }
+}
+
+function updateReferenceHighlighting() {
+  if (!proseRef.value) return
+
+  // Find all spans with data-rid attributes
+  const spans = proseRef.value.querySelectorAll("span[data-rid]")
+
+  spans.forEach((span) => {
+    const rid = span.getAttribute("data-rid")
+    if (rid === activeReferenceId.value) {
+      span.setAttribute("data-active", "true")
+    } else {
+      span.removeAttribute("data-active")
+    }
+  })
 }
 
 // Use VueUse's useEventListener with delegation for better performance
@@ -58,14 +79,39 @@ useEventListener(proseRef, "click", (event) => {
 useMutationObserver(
   proseRef,
   () => {
-    // This automatically handles cases where content changes
-    // No need for manual reattachment
+    // Update highlighting when content changes
+    nextTick(() => {
+      updateReferenceHighlighting()
+    })
   },
   {
     childList: true,
     subtree: true,
   },
 )
+
+// Watch for active reference changes and update highlighting
+watch(activeReferenceId, () => {
+  nextTick(() => {
+    updateReferenceHighlighting()
+  })
+})
+
+// Watch for changes in paper content and update highlighting
+watch(
+  () => paper.value?.content,
+  () => {
+    nextTick(() => {
+      updateReferenceHighlighting()
+    })
+  },
+)
+
+onMounted(() => {
+  nextTick(() => {
+    updateReferenceHighlighting()
+  })
+})
 </script>
 
 <template>
@@ -102,7 +148,7 @@ useMutationObserver(
           <div class="border-t border-gray-200 pt-5">
             <div
               ref="proseRef"
-              class="prose max-w-full [&_span[data-rid]]:cursor-pointer [&_span[data-rid]]:rounded [&_span[data-rid]]:hover:bg-yellow-200 [&_span[data-rid]]:hover:text-yellow-950"
+              class="prose max-w-full [&_span[data-active='true']]:bg-yellow-200 [&_span[data-active='true']]:text-yellow-950 [&_span[data-rid]]:cursor-pointer [&_span[data-rid]]:rounded [&_span[data-rid]]:px-1 [&_span[data-rid]]:hover:bg-yellow-200 [&_span[data-rid]]:hover:text-yellow-950"
               v-html="markdownToHtml(paper.content)"
             ></div>
           </div>
@@ -118,6 +164,14 @@ useMutationObserver(
             >
               <div class="font-semibold">{{ reference.title }}</div>
               <div>{{ reference.authors }}</div>
+              <div
+                class="rounded-lg bg-yellow-300 px-2.5 py-1 text-yellow-950"
+                v-show="activeReferenceId === reference.id"
+              >
+                <p>Source: {{ reference.source ?? "N/A" }}</p>
+                <p>Summary: {{ reference.summary ?? "N/A" }}</p>
+                <p>Validity: {{ reference.validity ?? "N/A" }}</p>
+              </div>
             </div>
           </div>
         </div>
