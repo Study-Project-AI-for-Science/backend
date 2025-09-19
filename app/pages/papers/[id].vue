@@ -2,6 +2,7 @@
 import { ArrowLeftIcon, RabbitIcon, ExternalLinkIcon } from "lucide-vue-next"
 import { marked } from "marked"
 import DOMPurify from "dompurify"
+import { useEventListener, useMutationObserver } from "@vueuse/core"
 
 const route = useRoute()
 const paperId = route.params.id
@@ -10,13 +11,61 @@ const paper = computed(() => {
   return paperData.find((paper) => paper.id === paperId)
 })
 
+const proseRef = ref<HTMLElement>()
+
 function markdownToHtml(markdown: string) {
   if (!markdown) return ""
   const html = marked(markdown) as string
   // sanitize the html
-  const sanitizedHtml = DOMPurify.sanitize(html)
+  const sanitizedHtml = DOMPurify.sanitize(html, {
+    ADD_ATTR: ["data-rid"],
+  })
+
   return sanitizedHtml
 }
+
+let activeReferenceId = ref<string | null>(null)
+
+function handleReferenceClick(rid: string, element: HTMLElement) {
+  console.log("Reference clicked:", rid)
+  console.log("Element:", element)
+
+  // Find the corresponding reference in the paper
+  const reference = paper.value?.references?.find((ref) => ref.id === rid)
+  if (reference) {
+    console.log("Found reference:", reference)
+    activeReferenceId.value = reference.id
+    // You can scroll to the reference in the sidebar, highlight it, etc.
+    // For example, you could emit an event, update state, or perform any action
+  }
+}
+
+// Use VueUse's useEventListener with delegation for better performance
+useEventListener(proseRef, "click", (event) => {
+  const target = event.target as HTMLElement
+
+  // Check if the clicked element or its parents have data-rid
+  const ridElement = target.closest("span[data-rid]") as HTMLElement
+  if (ridElement) {
+    const rid = ridElement.getAttribute("data-rid")
+    if (rid) {
+      handleReferenceClick(rid, ridElement)
+    }
+  }
+})
+
+// Watch for DOM changes in the prose content and handle dynamic content
+useMutationObserver(
+  proseRef,
+  () => {
+    // This automatically handles cases where content changes
+    // No need for manual reattachment
+  },
+  {
+    childList: true,
+    subtree: true,
+  },
+)
 </script>
 
 <template>
@@ -50,10 +99,12 @@ function markdownToHtml(markdown: string) {
             </DButton>
           </div>
           <div></div>
-          <div class="prose border-t border-gray-200 pt-5">
-            <h2>Content</h2>
-            <div v-html="markdownToHtml(paper.content)"></div>
-            <!-- <pre>{{ paper.content }}</pre> -->
+          <div class="border-t border-gray-200 pt-5">
+            <div
+              ref="proseRef"
+              class="prose max-w-full [&_span[data-rid]]:cursor-pointer [&_span[data-rid]]:rounded [&_span[data-rid]]:hover:bg-yellow-200 [&_span[data-rid]]:hover:text-yellow-950"
+              v-html="markdownToHtml(paper.content)"
+            ></div>
           </div>
         </div>
         <div class="overflow-auto p-4">
@@ -63,6 +114,7 @@ function markdownToHtml(markdown: string) {
             <div
               v-for="reference in paper.references"
               class="flex flex-col gap-2 rounded-md bg-gray-100 p-2"
+              :class="activeReferenceId === reference.id ? 'bg-yellow-200' : ''"
             >
               <div class="font-semibold">{{ reference.title }}</div>
               <div>{{ reference.authors }}</div>

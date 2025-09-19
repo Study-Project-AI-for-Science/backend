@@ -8,6 +8,8 @@ export default defineNuxtConfig({
   future: { compatibilityVersion: 4 },
   vite: { plugins: [tailwindcss()] },
 
+  ssr: false,
+
   runtimeConfig: {
     s3AccessKeyId: process.env.NUXT_S3_ACCESS_KEY_ID,
     s3SecretAccessKey: process.env.NUXT_S3_SECRET_ACCESS_KEY,
