@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeftIcon, RabbitIcon } from "lucide-vue-next"
+import { ArrowLeftIcon, RabbitIcon, ExternalLinkIcon } from "lucide-vue-next"
 import { marked } from "marked"
 import DOMPurify from "dompurify"
 
@@ -39,9 +39,15 @@ function markdownToHtml(markdown: string) {
           </div>
           <div class="flex flex-col gap-2">
             <div class="text-xl font-semibold">Online Url</div>
-            <div>
-              <a :href="paper.onlineUrl" target="_blank">{{ paper.onlineUrl }}</a>
-            </div>
+            <DButton
+              :icon-left="ExternalLinkIcon"
+              variant="secondary"
+              class="w-fit"
+              :to="paper.onlineUrl"
+              target="_blank"
+            >
+              View online
+            </DButton>
           </div>
           <div></div>
           <div class="prose border-t border-gray-200 pt-5">

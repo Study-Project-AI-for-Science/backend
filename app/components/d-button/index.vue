@@ -35,7 +35,7 @@ const {
       'justify-center': textCenter,
     }"
   >
-    <component v-if="iconLeft" :is="iconLeft" class="size-4" />
+    <component v-if="iconLeft" :is="iconLeft" class="size-4" :class="{ 'opacity-0': loading }" />
     <div v-if="$slots.default" class="inline" :class="{ 'opacity-0': loading }">
       <slot></slot>
     </div>

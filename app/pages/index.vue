@@ -23,6 +23,25 @@ function highlightText(text: string, search: string) {
     (match) => `<span class="bg-yellow-200">${match}</span>`,
   )
 }
+
+const { files, open, reset, onCancel, onChange } = useFileDialog({
+  accept: "application/*",
+  directory: false,
+})
+
+const isUploading = ref(false)
+
+function uploadPaper() {
+  open()
+}
+
+onChange(async (files) => {
+  isUploading.value = true
+  await new Promise((resolve) => setTimeout(resolve, 1000))
+  isUploading.value = false
+  reset()
+  await navigateTo("/papers/" + paperData[0]!.id)
+})
 </script>
 
 <template>
@@ -45,7 +64,9 @@ function highlightText(text: string, search: string) {
       </div>
 
       <template #right>
-        <DButton :icon-left="CloudUploadIcon" @click="uploadPaper">Paper upload</DButton>
+        <DButton :icon-left="CloudUploadIcon" @click="uploadPaper" :loading="isUploading">
+          Paper upload
+        </DButton>
       </template>
     </DHeader>
     <DPageContent>
@@ -66,7 +87,9 @@ function highlightText(text: string, search: string) {
               above.
             </p>
             <div class="mt-5">
-              <DButton :icon-left="CloudUploadIcon" @click="uploadPaper">Paper upload</DButton>
+              <DButton :icon-left="CloudUploadIcon" @click="uploadPaper" :loading="isUploading">
+                Paper upload
+              </DButton>
             </div>
           </div>
         </div>
