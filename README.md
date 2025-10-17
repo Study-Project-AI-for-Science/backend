@@ -1,5 +1,8 @@
 # LLMs for Science Backend
 
+[![Docker](https://github.com/Study-Project-AI-for-Science/backend/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/Study-Project-AI-for-Science/backend/actions/workflows/docker-publish.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A full-stack research paper processing application built with Nuxt 3, designed to help scientists analyze and work with academic papers using Large Language Models (LLMs). The application processes PDF papers, extracts content, generates embeddings, and provides AI-powered analysis.
 
 ## ✨ Features
@@ -240,7 +243,9 @@ The Dockerfile uses a multi-stage build for optimized production images.
 
 ## 🤝 Contributing
 
-We welcome contributions! Here's how you can help:
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for detailed information on how to contribute to this project.
+
+Quick summary:
 
 1. **Fork the repository**
 2. **Create a feature branch**: `git checkout -b feature/amazing-feature`
@@ -255,6 +260,8 @@ We welcome contributions! Here's how you can help:
 - Add tests for new features
 - Update documentation as needed
 - Ensure all tests pass before submitting PR
+
+For more details, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## 🐛 Troubleshooting
 
@@ -281,7 +288,7 @@ We welcome contributions! Here's how you can help:
 
 ## 📝 License
 
-This project is part of the LLMs for Science initiative.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
